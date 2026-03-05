@@ -15,6 +15,7 @@ import {
 import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -236,6 +237,51 @@ const PacientePerfilScreen: React.FC = () => {
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
+  const persistUser = async (nextUser: User) => {
+    const raw = JSON.stringify(nextUser);
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, raw);
+    } catch {}
+    try {
+      await SecureStore.setItemAsync(LEGACY_USER_STORAGE_KEY, raw);
+    } catch {}
+    if (Platform.OS === 'web') {
+      try {
+        (globalThis as any).localStorage?.setItem(LEGACY_USER_STORAGE_KEY, raw);
+      } catch {}
+    }
+  };
+
+  const handlePickProfilePhoto = async () => {
+    try {
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permiso requerido', 'Debes permitir acceso a la galería para subir tu foto.');
+          return;
+        }
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+      const uri = result.assets[0].uri;
+      if (!uri) return;
+
+      const nextUser: User = { ...(user || {}), fotoUrl: uri };
+      setUser(nextUser);
+      await persistUser(nextUser);
+      Alert.alert('Foto actualizada', 'Tu foto de perfil fue actualizada.');
+    } catch {
+      Alert.alert('Error', 'No se pudo actualizar la foto de perfil.');
+    }
+  };
+
   const handleSave = async () => {
     if (!form.nombres.trim() || !form.apellidos.trim() || !form.email.trim()) {
       Alert.alert('Datos incompletos', 'Completa al menos nombre, apellido y correo.');
@@ -344,6 +390,18 @@ const PacientePerfilScreen: React.FC = () => {
             Mantén tus datos personales, médicos y de contacto siempre actualizados.
           </Text>
         </View>
+
+        <ProfileCard title="Foto de perfil">
+          <View style={styles.photoRow}>
+            <Image source={userAvatarSource} style={styles.profilePhoto} />
+            <TouchableOpacity style={styles.photoActionBtn} onPress={handlePickProfilePhoto}>
+              <MaterialIcons name="photo-camera" size={16} color={colors.primary} />
+              <Text style={styles.photoActionBtnText}>
+                {user?.fotoUrl ? 'Cambiar foto' : 'Agregar foto'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ProfileCard>
 
         <ProfileCard title="Datos personales">
           <View style={styles.grid2}>
@@ -680,6 +738,29 @@ const styles = StyleSheet.create({
   titleWrap: { marginBottom: 14 },
   pageTitle: { color: colors.dark, fontSize: 28, fontWeight: '900' },
   pageSubtitle: { color: colors.muted, fontSize: 14, fontWeight: '600', marginTop: 4 },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  profilePhoto: {
+    width: 88,
+    height: 88,
+    borderRadius: 88,
+    borderWidth: 3,
+    borderColor: '#dceafb',
+    backgroundColor: '#f5f8fc',
+  },
+  photoHint: { color: colors.muted, fontSize: 12, fontWeight: '600', marginTop: 3 },
+  photoActionBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#cfe1f3',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#f8fcff',
+  },
+  photoActionBtnText: { color: colors.primary, fontSize: 12, fontWeight: '800' },
   card: {
     backgroundColor: '#fff',
     borderWidth: 1,
