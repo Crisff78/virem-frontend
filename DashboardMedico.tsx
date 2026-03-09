@@ -344,20 +344,22 @@ export default DashboardMedico;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
     backgroundColor: colors.bgLight,
   },
 
   /* Sidebar */
   sidebar: {
-    width: 256,
+    width: Platform.OS === 'web' ? 256 : '100%',
     backgroundColor: colors.white,
-    borderRightWidth: 1,
+    borderRightWidth: Platform.OS === 'web' ? 1 : 0,
+    borderBottomWidth: Platform.OS === 'web' ? 0 : 1,
     borderRightColor: colors.viremLight,
+    borderBottomColor: colors.viremLight,
   },
   sidebarInner: {
     flex: 1,
-    padding: 24,
+    padding: Platform.OS === 'web' ? 24 : 14,
     justifyContent: 'space-between',
   },
   sidebarTop: {
@@ -395,6 +397,8 @@ const styles = StyleSheet.create({
   nav: {
     gap: 8,
     marginTop: 8,
+    flexDirection: Platform.OS === 'web' ? 'column' : 'row',
+    flexWrap: 'wrap',
   },
   sideItem: {
     flexDirection: 'row',
@@ -403,6 +407,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 10,
+    minWidth: Platform.OS === 'web' ? 0 : 150,
   },
   sideItemActive: {
     backgroundColor: 'rgba(19,127,236,0.10)',
@@ -430,6 +435,7 @@ const styles = StyleSheet.create({
 
   sidebarBottom: {
     gap: 14,
+    marginTop: 12,
   },
   docCard: {
     flexDirection: 'row',
@@ -478,11 +484,15 @@ const styles = StyleSheet.create({
   /* Main */
   main: { flex: 1 },
 
-  headerWrap: { paddingHorizontal: 32, paddingTop: 32, paddingBottom: 16 },
+  headerWrap: {
+    paddingHorizontal: Platform.OS === 'web' ? 32 : 14,
+    paddingTop: Platform.OS === 'web' ? 32 : 14,
+    paddingBottom: 16,
+  },
   headerRow: {
-    flexDirection: 'row',
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    alignItems: Platform.OS === 'web' ? 'flex-end' : 'flex-start',
     gap: 14,
   },
   headerLeft: { flex: 1 },
@@ -498,13 +508,13 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontWeight: '500',
   },
-  headerRight: { alignItems: 'flex-end' },
+  headerRight: { alignItems: Platform.OS === 'web' ? 'flex-end' : 'flex-start' },
   headerDate: { color: colors.viremDark, fontSize: 14, fontWeight: '800' },
   headerTime: { color: colors.viremMuted, fontSize: 12, marginTop: 2 },
 
   /* Stats */
   statsGrid: {
-    paddingHorizontal: 32,
+    paddingHorizontal: Platform.OS === 'web' ? 32 : 14,
     paddingVertical: 16,
     flexDirection: 'row',
     gap: 12,
@@ -543,7 +553,7 @@ const styles = StyleSheet.create({
 
   /* Banner */
   banner: {
-    marginHorizontal: 32,
+    marginHorizontal: Platform.OS === 'web' ? 32 : 14,
     marginVertical: 16,
     backgroundColor: colors.viremDeep,
     borderRadius: 14,
@@ -560,9 +570,9 @@ const styles = StyleSheet.create({
         }),
   },
   bannerRow: {
-    flexDirection: 'row',
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: Platform.OS === 'web' ? 'center' : 'flex-start',
     gap: 16,
     zIndex: 2,
   },
@@ -609,7 +619,7 @@ const styles = StyleSheet.create({
 
   /* Bottom grid */
   bottomGrid: {
-    paddingHorizontal: 32,
+    paddingHorizontal: Platform.OS === 'web' ? 32 : 14,
     paddingTop: 8,
     paddingBottom: 24,
     flexDirection: 'row',

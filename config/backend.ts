@@ -1,21 +1,43 @@
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-// 🔥 TU IP REAL (la que vimos en ipconfig)
-const LAN_IP = '192.168.137.1';
+const WEB_DEFAULT_BACKEND_URL = 'http://localhost:3000';
+const MOBILE_FALLBACK_BACKEND_URL = 'https://virem-backend.onrender.com';
 
-// Defaults según plataforma
-const DEFAULT_BACKEND_URL =
-  Platform.OS === 'web'
-    ? 'http://localhost:3000'     // Web en tu PC
-    : `http://${LAN_IP}:3000`;    // Celular Expo Go (misma red)
+type ExpoConstantsHostShape = {
+  expoConfig?: { hostUri?: string | null };
+  manifest2?: { extra?: { expoClient?: { hostUri?: string | null } } };
+  manifest?: { debuggerHost?: string | null };
+};
 
-// Si usas emulador Android, 10.0.2.2 funciona, pero SOLO en emulador.
-// Como tú quieres web + celular, el default será LAN_IP.
-// Si algún día usas emulador, pon EXPO_PUBLIC_BACKEND_URL=http://10.0.2.2:3000 en el .env.
+const extractHostFromUri = (hostUri?: string | null): string | null => {
+  if (!hostUri) return null;
 
-export const BACKEND_URL =
-  (process.env.EXPO_PUBLIC_BACKEND_URL && process.env.EXPO_PUBLIC_BACKEND_URL.trim()) ||
-  DEFAULT_BACKEND_URL;
+  const [host] = hostUri.split(':');
+  if (!host || host === 'localhost' || host === '127.0.0.1') return null;
+  return host;
+};
+
+const resolveNativeDevBackendUrl = (): string | null => {
+  const expoConstants = Constants as unknown as ExpoConstantsHostShape;
+
+  const host =
+    extractHostFromUri(expoConstants.expoConfig?.hostUri) ||
+    extractHostFromUri(expoConstants.manifest2?.extra?.expoClient?.hostUri) ||
+    extractHostFromUri(expoConstants.manifest?.debuggerHost);
+
+  if (!host) return null;
+  return `http://${host}:3000`;
+};
+
+const resolveDefaultBackendUrl = (): string => {
+  if (Platform.OS === 'web') return WEB_DEFAULT_BACKEND_URL;
+  return resolveNativeDevBackendUrl() || MOBILE_FALLBACK_BACKEND_URL;
+};
+
+const envBackendUrl = process.env.EXPO_PUBLIC_BACKEND_URL?.trim();
+
+export const BACKEND_URL = envBackendUrl || resolveDefaultBackendUrl();
 
 export const apiUrl = (path: string) =>
   `${BACKEND_URL}${path.startsWith('/') ? path : `/${path}`}`;

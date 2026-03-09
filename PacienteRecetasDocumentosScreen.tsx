@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   Platform,
+  Share,
   ScrollView,
   StyleSheet,
   Text,
@@ -126,10 +127,12 @@ const downloadExampleDocument = (item: DocumentItem) => {
     return;
   }
 
-  Alert.alert(
-    'Descarga no disponible',
-    'La descarga de ejemplo está habilitada para web en esta demo.'
-  );
+  Share.share({
+    title: item.title,
+    message: `${buildDocumentContent(item)}\n\n(Documento de ejemplo VIREM)`,
+  }).catch(() => {
+    Alert.alert('Error', 'No se pudo compartir el documento en este dispositivo.');
+  });
 };
 
 const DocumentRow: React.FC<{ item: DocumentItem }> = ({ item }) => (
@@ -343,15 +346,21 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
+  container: {
+    flex: 1,
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+    backgroundColor: colors.bg,
+  },
   loaderWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg },
   loaderText: { marginTop: 10, color: colors.muted, fontWeight: '700' },
   sidebar: {
-    width: 280,
+    width: Platform.OS === 'web' ? 280 : '100%',
     backgroundColor: colors.white,
-    borderRightWidth: 1,
+    borderRightWidth: Platform.OS === 'web' ? 1 : 0,
+    borderBottomWidth: Platform.OS === 'web' ? 0 : 1,
     borderRightColor: '#eef2f7',
-    padding: 20,
+    borderBottomColor: '#eef2f7',
+    padding: Platform.OS === 'web' ? 20 : 14,
     justifyContent: 'space-between',
   },
   logoBox: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -362,17 +371,35 @@ const styles = StyleSheet.create({
   userAvatar: { width: 76, height: 76, borderRadius: 76, marginBottom: 10, borderWidth: 4, borderColor: '#f5f7fb' },
   userName: { fontWeight: '800', color: colors.dark, fontSize: 14 },
   userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
-  menu: { marginTop: 10, gap: 6, flex: 1 },
-  menuItemRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12 },
+  menu: {
+    marginTop: 10,
+    gap: 6,
+    flex: Platform.OS === 'web' ? 1 : 0,
+    flexDirection: Platform.OS === 'web' ? 'column' : 'row',
+    flexWrap: 'wrap',
+  },
+  menuItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    minWidth: Platform.OS === 'web' ? 0 : 150,
+  },
   menuItemActive: { backgroundColor: 'rgba(19,127,236,0.10)', borderRightWidth: 3, borderRightColor: colors.primary },
   menuText: { fontSize: 14, fontWeight: '700', color: colors.muted },
   menuTextActive: { color: colors.primary },
   logoutButton: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.blue, paddingVertical: 12, borderRadius: 12 },
   logoutText: { color: '#fff', fontWeight: '800' },
-  main: { flex: 1, paddingHorizontal: 24, paddingTop: 18 },
+  main: {
+    flex: 1,
+    paddingHorizontal: Platform.OS === 'web' ? 24 : 14,
+    paddingTop: Platform.OS === 'web' ? 18 : 12,
+  },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
   searchBox: {
-    minWidth: 300,
+    minWidth: Platform.OS === 'web' ? 300 : 0,
     flexGrow: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -396,7 +423,18 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.dark, fontSize: 16, fontWeight: '900' },
   sectionCount: { color: colors.muted, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
   sectionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  docCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#dce9f5', borderRadius: 14, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 300, flex: 1 },
+  docCard: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#dce9f5',
+    borderRadius: 14,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minWidth: Platform.OS === 'web' ? 300 : 0,
+    flex: 1,
+  },
   docIconWrap: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   docTitle: { color: colors.dark, fontWeight: '800', fontSize: 14 },
   docSub: { color: colors.muted, fontWeight: '600', fontSize: 12, marginTop: 2 },
@@ -408,3 +446,4 @@ const styles = StyleSheet.create({
 });
 
 export default PacienteRecetasDocumentosScreen;
+

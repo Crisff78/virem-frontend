@@ -764,14 +764,20 @@ const colors = {
 
 /* ===================== ESTILOS ===================== */
 const styles = StyleSheet.create({
-  container: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
+  container: {
+    flex: 1,
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+    backgroundColor: colors.bg,
+  },
 
   sidebar: {
-    width: 280,
+    width: Platform.OS === 'web' ? 280 : '100%',
     backgroundColor: colors.white,
-    borderRightWidth: 1,
+    borderRightWidth: Platform.OS === 'web' ? 1 : 0,
+    borderBottomWidth: Platform.OS === 'web' ? 0 : 1,
     borderRightColor: '#eef2f7',
-    padding: 20,
+    borderBottomColor: '#eef2f7',
+    padding: Platform.OS === 'web' ? 20 : 14,
     justifyContent: 'space-between',
   },
 
@@ -793,7 +799,13 @@ const styles = StyleSheet.create({
   userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
   hintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700' },
 
-  menu: { marginTop: 10, gap: 6, flex: 1 },
+  menu: {
+    marginTop: 10,
+    gap: 6,
+    flex: Platform.OS === 'web' ? 1 : 0,
+    flexDirection: Platform.OS === 'web' ? 'column' : 'row',
+    flexWrap: 'wrap',
+  },
   menuItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -801,6 +813,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 12,
+    minWidth: Platform.OS === 'web' ? 0 : 150,
   },
   menuItemActive: {
     backgroundColor: 'rgba(19,127,236,0.10)',
@@ -821,9 +834,20 @@ const styles = StyleSheet.create({
   },
   logoutText: { color: '#fff', fontWeight: '800' },
 
-  main: { flex: 1, paddingHorizontal: 26, paddingTop: 18 },
+  main: {
+    flex: 1,
+    paddingHorizontal: Platform.OS === 'web' ? 26 : 14,
+    paddingTop: Platform.OS === 'web' ? 18 : 12,
+  },
 
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 10,
+    flexWrap: 'wrap',
+  },
 
   searchBox: {
     flex: 1,
@@ -874,7 +898,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 24,
     padding: 18,
-    flexDirection: 'row',
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
     gap: 16,
     marginBottom: 18,
     shadowColor: colors.dark,
@@ -884,7 +908,11 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   bigCardLeft: { flex: 1 },
-  bigCardRight: { width: 160, justifyContent: 'center', alignItems: 'center' },
+  bigCardRight: {
+    width: Platform.OS === 'web' ? 160 : '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   bigCardImage: { width: 140, height: 140, borderRadius: 20 },
 
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
@@ -921,7 +949,11 @@ const styles = StyleSheet.create({
   quickIconBox: { width: 56, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   quickLabel: { fontWeight: '900', color: colors.dark, textAlign: 'center' },
 
-  twoCols: { flexDirection: 'row', gap: 16, marginTop: 16 },
+  twoCols: {
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+    gap: 16,
+    marginTop: 16,
+  },
   colLeft: { flex: 2 },
   colRight: { flex: 1.2 },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -1005,7 +1037,18 @@ const styles = StyleSheet.create({
   docSub: { color: colors.muted, fontWeight: '700', fontSize: 11, marginTop: 2 },
 
   doctorsGrid: { flexDirection: 'row', gap: 12, marginTop: 10, flexWrap: 'wrap' },
-  doctorCard: { width: '48%', backgroundColor: '#fff', padding: 14, borderRadius: 22, alignItems: 'center', shadowColor: colors.dark, shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  doctorCard: {
+    width: Platform.OS === 'web' ? '48%' : '100%',
+    backgroundColor: '#fff',
+    padding: 14,
+    borderRadius: 22,
+    alignItems: 'center',
+    shadowColor: colors.dark,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
   doctorAvatar: { width: 64, height: 64, borderRadius: 64, marginBottom: 10, borderWidth: 4, borderColor: '#f5f7fb' },
   doctorName: { fontWeight: '900', color: colors.dark, textAlign: 'center', fontSize: 12 },
   doctorSpec: { color: colors.muted, fontWeight: '900', fontSize: 10, marginTop: 4, marginBottom: 10, letterSpacing: 1, textTransform: 'uppercase' },

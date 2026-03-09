@@ -618,7 +618,11 @@ const colors = {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
+  container: {
+    flex: 1,
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+    backgroundColor: colors.bg,
+  },
   loaderWrap: {
     flex: 1,
     alignItems: 'center',
@@ -628,11 +632,13 @@ const styles = StyleSheet.create({
   loaderText: { marginTop: 10, color: colors.muted, fontWeight: '700' },
 
   sidebar: {
-    width: 280,
+    width: Platform.OS === 'web' ? 280 : '100%',
     backgroundColor: colors.white,
-    borderRightWidth: 1,
+    borderRightWidth: Platform.OS === 'web' ? 1 : 0,
+    borderBottomWidth: Platform.OS === 'web' ? 0 : 1,
     borderRightColor: '#eef2f7',
-    padding: 20,
+    borderBottomColor: '#eef2f7',
+    padding: Platform.OS === 'web' ? 20 : 14,
     justifyContent: 'space-between',
   },
   logoBox: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -651,7 +657,13 @@ const styles = StyleSheet.create({
   userName: { fontWeight: '800', color: colors.dark, fontSize: 14 },
   userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
   hintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700' },
-  menu: { marginTop: 10, gap: 6, flex: 1 },
+  menu: {
+    marginTop: 10,
+    gap: 6,
+    flex: Platform.OS === 'web' ? 1 : 0,
+    flexDirection: Platform.OS === 'web' ? 'column' : 'row',
+    flexWrap: 'wrap',
+  },
   menuItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -659,6 +671,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 12,
+    minWidth: Platform.OS === 'web' ? 0 : 150,
   },
   menuItemActive: {
     backgroundColor: 'rgba(19,127,236,0.10)',
@@ -678,13 +691,18 @@ const styles = StyleSheet.create({
   },
   logoutText: { color: '#fff', fontWeight: '800' },
 
-  main: { flex: 1, paddingHorizontal: 26, paddingTop: 18 },
+  main: {
+    flex: 1,
+    paddingHorizontal: Platform.OS === 'web' ? 26 : 14,
+    paddingTop: Platform.OS === 'web' ? 18 : 12,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
     marginBottom: 14,
+    flexWrap: 'wrap',
   },
   searchBox: {
     flex: 1,

@@ -562,20 +562,31 @@ const colors = {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
+  container: {
+    flex: 1,
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+    backgroundColor: colors.bg,
+  },
   sidebar: {
-    width: 280,
+    width: Platform.OS === 'web' ? 280 : '100%',
     backgroundColor: colors.white,
-    borderRightWidth: 1,
+    borderRightWidth: Platform.OS === 'web' ? 1 : 0,
+    borderBottomWidth: Platform.OS === 'web' ? 0 : 1,
     borderRightColor: '#eef2f7',
-    padding: 20,
+    borderBottomColor: '#eef2f7',
+    padding: Platform.OS === 'web' ? 20 : 14,
     justifyContent: 'space-between',
   },
   logoBox: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   logo: { width: 44, height: 44, resizeMode: 'contain' },
   logoTitle: { fontSize: 20, fontWeight: '800', color: colors.dark, letterSpacing: 0.5 },
   logoSubtitle: { fontSize: 11, fontWeight: '700', color: colors.muted },
-  menu: { marginTop: 18, gap: 6 },
+  menu: {
+    marginTop: 18,
+    gap: 6,
+    flexDirection: Platform.OS === 'web' ? 'column' : 'row',
+    flexWrap: 'wrap',
+  },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -583,6 +594,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderRadius: 12,
+    minWidth: Platform.OS === 'web' ? 0 : 150,
   },
   menuItemActive: {
     backgroundColor: 'rgba(19,127,236,0.10)',
@@ -618,6 +630,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
   },
   liveTag: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   liveTagText: { fontSize: 14, fontWeight: '900', color: colors.muted, letterSpacing: 0.8 },
@@ -634,9 +647,9 @@ const styles = StyleSheet.create({
   connectedText: { color: '#16a34a', fontWeight: '800', fontSize: 11 },
   contentWrap: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
     gap: 18,
-    paddingHorizontal: 22,
+    paddingHorizontal: Platform.OS === 'web' ? 22 : 14,
     paddingTop: 16,
     paddingBottom: 10,
   },

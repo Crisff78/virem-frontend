@@ -8,7 +8,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "start:web": "cross-env EXPO_PUBLIC_BACKEND_URL=http://localhost:3000 expo start --web -c",
-    "start:mobile": "cross-env EXPO_PUBLIC_BACKEND_URL=http://10.169.78.245:3000 expo start -c"
+    "start:mobile": "expo start -c",
+    "start:mobile:remote": "cross-env EXPO_PUBLIC_BACKEND_URL=https://virem-backend.onrender.com expo start -c"
   },
   "dependencies": {
     "@babel/highlight": "^7.25.9",

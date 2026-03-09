@@ -433,17 +433,23 @@ const colors = {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
+  container: {
+    flex: 1,
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+    backgroundColor: colors.bg,
+  },
   loaderWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg },
   loaderText: { marginTop: 8, color: colors.muted, fontWeight: '700' },
 
   sidebar: {
-    width: 240,
+    width: Platform.OS === 'web' ? 240 : '100%',
     backgroundColor: colors.white,
-    borderRightWidth: 1,
+    borderRightWidth: Platform.OS === 'web' ? 1 : 0,
+    borderBottomWidth: Platform.OS === 'web' ? 0 : 1,
     borderRightColor: '#e9eff6',
+    borderBottomColor: '#e9eff6',
     paddingHorizontal: 12,
-    paddingTop: 18,
+    paddingTop: Platform.OS === 'web' ? 18 : 12,
     paddingBottom: 12,
     justifyContent: 'space-between',
   },
@@ -451,7 +457,7 @@ const styles = StyleSheet.create({
   logo: { width: 30, height: 30, resizeMode: 'contain' },
   logoTitle: { fontSize: 20, fontWeight: '900', color: colors.dark, letterSpacing: 0.5 },
   logoSubtitle: { fontSize: 10, color: colors.muted, fontWeight: '700' },
-  menu: { gap: 4 },
+  menu: { gap: 4, flexDirection: Platform.OS === 'web' ? 'column' : 'row', flexWrap: 'wrap' },
   menuItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -459,6 +465,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 10,
     borderRadius: 10,
+    minWidth: Platform.OS === 'web' ? 0 : 150,
   },
   menuItemActive: { backgroundColor: 'rgba(19,127,236,0.08)' },
   menuText: { color: colors.muted, fontWeight: '700', fontSize: 14 },
@@ -485,6 +492,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
+    flexWrap: 'wrap',
   },
   searchInput: {
     flex: 1,
@@ -511,12 +519,20 @@ const styles = StyleSheet.create({
   userPlan: { color: colors.muted, fontWeight: '600', fontSize: 10, textAlign: 'right' },
   userAvatar: { width: 32, height: 32, borderRadius: 32, borderWidth: 2, borderColor: '#d9e7f4' },
 
-  main: { flex: 1, paddingHorizontal: 18, paddingTop: 14 },
+  main: {
+    flex: 1,
+    paddingHorizontal: Platform.OS === 'web' ? 18 : 12,
+    paddingTop: 14,
+  },
   breadcrumbRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
   breadcrumbLink: { color: colors.muted, fontSize: 12, fontWeight: '700' },
   breadcrumbCurrent: { color: colors.primary, fontSize: 12, fontWeight: '800' },
-  contentRow: { flexDirection: 'row', gap: 16, alignItems: 'flex-start' },
-  bookingCol: { width: 340 },
+  contentRow: {
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+    gap: 16,
+    alignItems: 'flex-start',
+  },
+  bookingCol: { width: Platform.OS === 'web' ? 340 : '100%' },
 
   profileCard: {
     backgroundColor: '#fff',
