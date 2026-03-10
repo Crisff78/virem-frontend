@@ -20,6 +20,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import { useLanguage } from './localization/LanguageContext';
+import type { RootStackParamList } from './navigation/types';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
@@ -67,8 +68,8 @@ const parseUser = (raw: string | null): User | null => {
 
 const recetas: DocumentItem[] = [
   {
-    title: 'Tratamiento HipertensiÃ³n',
-    doctor: 'Dr. Alejandro GarcÃ­a',
+    title: 'Tratamiento Hipertensión',
+    doctor: 'Dr. Alejandro García',
     date: 'Emitido el 15 Oct, 2023',
     icon: 'picture-as-pdf',
     tint: '#ef4444',
@@ -76,14 +77,14 @@ const recetas: DocumentItem[] = [
   },
   {
     title: 'Receta_Gripe_Estacional',
-    doctor: 'Dra. Marta SÃ¡nchez',
+    doctor: 'Dra. Marta Sánchez',
     date: 'Emitido el 12 Oct, 2023',
     icon: 'picture-as-pdf',
     tint: '#ef4444',
     bg: '#fef2f2',
   },
   {
-    title: 'AntibiÃ³ticos_Amoxicilina',
+    title: 'Antibióticos_Amoxicilina',
     doctor: 'Dr. Ricardo Ruiz',
     date: 'Emitido el 05 Sep, 2023',
     icon: 'picture-as-pdf',
@@ -94,7 +95,7 @@ const recetas: DocumentItem[] = [
 
 const certificados: DocumentItem[] = [
   {
-    title: 'Certificado de Aptitud FÃ­sica',
+    title: 'Certificado de Aptitud Física',
     doctor: 'Dr. Ricardo Ruiz',
     date: 'Emitido el 01 Ago, 2023',
     icon: 'description',
@@ -110,7 +111,7 @@ const sanitizeFileName = (raw: string) =>
     .replace(/[^\w\-]/g, '');
 
 const buildDocumentContent = (item: DocumentItem) =>
-  `VIREM - Documento de ejemplo\n\nTÃ­tulo: ${item.title}\nEmitido por: ${item.doctor}\nFecha: ${item.date}\n\nNota: Este archivo es una demostraciÃ³n de descarga para pruebas de interfaz.`;
+  `VIREM - Documento de ejemplo\n\nTítulo: ${item.title}\nEmitido por: ${item.doctor}\nFecha: ${item.date}\n\nNota: Este archivo es una demostración de descarga para pruebas de interfaz.`;
 
 const downloadExampleDocument = (item: DocumentItem) => {
   if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof document !== 'undefined') {
@@ -180,6 +181,7 @@ const SectionBlock: React.FC<{
   </View>
 );
 
+const PacienteRecetasDocumentosScreen: React.FC = () => {
 
   const { t, tx } = useLanguage();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -239,7 +241,7 @@ const SectionBlock: React.FC<{
     return (
       <View style={styles.loaderWrap}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loaderText}>Cargando informaciÃ³n...</Text>
+        <Text style={styles.loaderText}>Cargando información...</Text>
       </View>
     );
   }
@@ -269,7 +271,7 @@ const SectionBlock: React.FC<{
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuItemRow}>
               <MaterialIcons name="person-search" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>Buscar MÃ©dico</Text>
+              <Text style={styles.menuText}>Buscar Médico</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuItemRow}>
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
@@ -327,10 +329,10 @@ const SectionBlock: React.FC<{
             })}
           </Text>
         <Text style={styles.pageSubtitle}>
-          Accede y descarga tu historial mÃ©dico organizado por categorÃ­as.
+          Accede y descarga tu historial médico organizado por categorías.
         </Text>
 
-        <SectionBlock icon="description" title="Recetas MÃ©dicas" count="3 ARCHIVOS" items={recetas} />
+        <SectionBlock icon="description" title="Recetas Médicas" count="3 ARCHIVOS" items={recetas} />
         <SectionBlock
           icon="verified"
           title="Certificados y Otros"
@@ -343,8 +345,8 @@ const SectionBlock: React.FC<{
           <View style={{ flex: 1 }}>
             <Text style={styles.noticeTitle}>Nota sobre la privacidad</Text>
             <Text style={styles.noticeText}>
-              Tus documentos mÃ©dicos estÃ¡n encriptados y protegidos. Solo tÃº y tus mÃ©dicos
-              autorizados tienen acceso a esta informaciÃ³n.
+              Tus documentos médicos están encriptados y protegidos. Solo tú y tus médicos
+              autorizados tienen acceso a esta información.
             </Text>
           </View>
         </View>

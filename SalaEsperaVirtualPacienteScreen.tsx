@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useLanguage } from './localization/LanguageContext';
+import type { RootStackParamList } from './navigation/types';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -28,6 +29,7 @@ type DeviceOption = {
   label: string;
 };
 
+const SalaEsperaVirtualPacienteScreen: React.FC = () => {
 
   const { t, tx } = useLanguage();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -122,8 +124,8 @@ type DeviceOption = {
 
   const loadWebDevices = async () => {
     if (Platform.OS !== 'web') {
-      const fallbackCams = [{ id: 'mobile-cam-1', label: 'CÃ¡mara del dispositivo' }];
-      const fallbackMics = [{ id: 'mobile-mic-1', label: 'MicrÃ³fono del dispositivo' }];
+      const fallbackCams = [{ id: 'mobile-cam-1', label: 'Cámara del dispositivo' }];
+      const fallbackMics = [{ id: 'mobile-mic-1', label: 'Micrófono del dispositivo' }];
       const fallbackSpeakers = [{ id: 'mobile-spk-1', label: 'Altavoz del dispositivo' }];
       setCameras(fallbackCams);
       setMicrophones(fallbackMics);
@@ -141,7 +143,7 @@ type DeviceOption = {
     try {
       const mediaDevices = (globalThis as any).navigator?.mediaDevices;
       if (!mediaDevices?.enumerateDevices) {
-        throw new Error('Tu navegador no soporta enumeraciÃ³n de dispositivos.');
+        throw new Error('Tu navegador no soporta enumeración de dispositivos.');
       }
 
       try {
@@ -155,14 +157,14 @@ type DeviceOption = {
         .filter((d: any) => d.kind === 'videoinput')
         .map((d: any, i: number) => ({
           id: d.deviceId || `cam-${i + 1}`,
-          label: d.label || `CÃ¡mara ${i + 1}`,
+          label: d.label || `Cámara ${i + 1}`,
         }));
 
       const micList: DeviceOption[] = rawDevices
         .filter((d: any) => d.kind === 'audioinput')
         .map((d: any, i: number) => ({
           id: d.deviceId || `mic-${i + 1}`,
-          label: d.label || `MicrÃ³fono ${i + 1}`,
+          label: d.label || `Micrófono ${i + 1}`,
         }));
 
       const speakerList: DeviceOption[] = rawDevices
@@ -219,7 +221,7 @@ type DeviceOption = {
 
             <TouchableOpacity style={styles.menuItem}>
               <MaterialIcons name="person-search" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>Buscar MÃ©dico</Text>
+              <Text style={styles.menuText}>Buscar Médico</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.menuItem}>
@@ -280,16 +282,16 @@ type DeviceOption = {
               </View>
             </View>
 
-            <Text style={styles.waitTitle}>El Dr. Alejandro GarcÃ­a se unirÃ¡ pronto a la sesiÃ³n</Text>
+            <Text style={styles.waitTitle}>El Dr. Alejandro García se unirá pronto a la sesión</Text>
             <View style={styles.waitDotsRow}>
-              <Animated.Text style={[styles.waitDot, { opacity: dot1 }]}>â€¢</Animated.Text>
-              <Animated.Text style={[styles.waitDot, { opacity: dot2 }]}>â€¢</Animated.Text>
-              <Animated.Text style={[styles.waitDot, { opacity: dot3 }]}>â€¢</Animated.Text>
+              <Animated.Text style={[styles.waitDot, { opacity: dot1 }]}>•</Animated.Text>
+              <Animated.Text style={[styles.waitDot, { opacity: dot2 }]}>•</Animated.Text>
+              <Animated.Text style={[styles.waitDot, { opacity: dot3 }]}>•</Animated.Text>
             </View>
             <Text style={styles.waitSub}>En espera...</Text>
 
             <Text style={styles.waitHint}>
-              Por favor, no cierres esta ventana. Se te notificarÃ¡ con un sonido cuando el doctor estÃ© listo.
+              Por favor, no cierres esta ventana. Se te notificará con un sonido cuando el doctor esté listo.
             </Text>
           </View>
 
@@ -301,7 +303,7 @@ type DeviceOption = {
                 <MaterialIcons name="medical-services" size={16} color={colors.primary} />
                 <View>
                   <Text style={styles.summaryLabel}>Doctor</Text>
-                  <Text style={styles.summaryValue}>Dr. Alejandro GarcÃ­a</Text>
+                  <Text style={styles.summaryValue}>Dr. Alejandro García</Text>
                 </View>
               </View>
 
@@ -309,7 +311,7 @@ type DeviceOption = {
                 <MaterialCommunityIcons name="heart-pulse" size={16} color={colors.primary} />
                 <View>
                   <Text style={styles.summaryLabel}>Especialidad</Text>
-                  <Text style={styles.summaryValue}>CardiologÃ­a ClÃ­nica</Text>
+                  <Text style={styles.summaryValue}>Cardiología Clínica</Text>
                 </View>
               </View>
 
@@ -325,7 +327,7 @@ type DeviceOption = {
             <View style={styles.cameraCard}>
               <Image source={CameraPreview} style={styles.cameraImage} />
               <View style={styles.cameraTag}>
-                <Text style={styles.cameraTagText}>TU CÃMARA</Text>
+                <Text style={styles.cameraTagText}>TU CÁMARA</Text>
               </View>
 
               <View style={styles.cameraControls}>
@@ -353,7 +355,7 @@ type DeviceOption = {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>SesiÃ³n Privada y Encriptada</Text>
+          <Text style={styles.footerText}>Sesión Privada y Encriptada</Text>
           <Text style={styles.footerText}>Soporte: 0-800-VIREM</Text>
         </View>
       </View>
@@ -399,13 +401,13 @@ type DeviceOption = {
                   <Text style={styles.audioOkText}>AUDIO OK</Text>
                 </View>
               </View>
-              <Text style={styles.settingsPreviewCaption}>PrevisualizaciÃ³n de cÃ¡mara e iluminaciÃ³n</Text>
+              <Text style={styles.settingsPreviewCaption}>Previsualización de cámara e iluminación</Text>
 
               <View style={styles.settingBlock}>
-                <Text style={styles.settingLabel}>CÃMARA</Text>
+                <Text style={styles.settingLabel}>CÁMARA</Text>
                 <TouchableOpacity style={styles.selectLike} onPress={() => setOpenSelect((prev) => (prev === 'camera' ? null : 'camera'))}>
                   <Text style={styles.selectLikeText}>
-                    {getSelectedLabel(cameras, selectedCameraId, 'Sin cÃ¡mara detectada')}
+                    {getSelectedLabel(cameras, selectedCameraId, 'Sin cámara detectada')}
                   </Text>
                   <MaterialIcons name="keyboard-arrow-down" size={18} color={colors.muted} />
                 </TouchableOpacity>
@@ -432,17 +434,17 @@ type DeviceOption = {
                         </TouchableOpacity>
                       ))
                     ) : (
-                      <Text style={styles.selectEmpty}>No hay cÃ¡maras disponibles</Text>
+                      <Text style={styles.selectEmpty}>No hay cámaras disponibles</Text>
                     )}
                   </View>
                 ) : null}
               </View>
 
               <View style={styles.settingBlock}>
-                <Text style={styles.settingLabel}>MICRÃ“FONO</Text>
+                <Text style={styles.settingLabel}>MICRÓFONO</Text>
                 <TouchableOpacity style={styles.selectLike} onPress={() => setOpenSelect((prev) => (prev === 'mic' ? null : 'mic'))}>
                   <Text style={styles.selectLikeText}>
-                    {getSelectedLabel(microphones, selectedMicId, 'Sin micrÃ³fono detectado')}
+                    {getSelectedLabel(microphones, selectedMicId, 'Sin micrófono detectado')}
                   </Text>
                   <MaterialIcons name="keyboard-arrow-down" size={18} color={colors.muted} />
                 </TouchableOpacity>
@@ -469,7 +471,7 @@ type DeviceOption = {
                         </TouchableOpacity>
                       ))
                     ) : (
-                      <Text style={styles.selectEmpty}>No hay micrÃ³fonos disponibles</Text>
+                      <Text style={styles.selectEmpty}>No hay micrófonos disponibles</Text>
                     )}
                   </View>
                 ) : null}
@@ -535,7 +537,7 @@ type DeviceOption = {
                 <View style={styles.toggleLeft}>
                   <MaterialIcons name="surround-sound" size={18} color={colors.muted} />
                   <View>
-                    <Text style={styles.toggleTitle}>CancelaciÃ³n de ruido</Text>
+                    <Text style={styles.toggleTitle}>Cancelación de ruido</Text>
                     <Text style={styles.toggleSubtitle}>Mejora la calidad de voz</Text>
                   </View>
                 </View>

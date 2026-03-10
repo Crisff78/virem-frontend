@@ -1,4 +1,3 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -151,7 +150,7 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
 
   const specialtyList = [
     { icon: 'heart-outline', label: 'Cardiologia', description: 'Corazon y sistema circulatorio' },
-    { icon: 'baby-face-outline', label: 'Pediatria', description: 'Atencion integral para niños' },
+    { icon: 'baby-face-outline', label: 'Pediatria', description: 'Atencion integral para ni�os' },
     { icon: 'brain', label: 'Neurologia', description: 'Cerebro y sistema nervioso' },
     { icon: 'face-man-outline', label: 'Dermatologia', description: 'Cuidado de la piel y cabello' },
     { icon: 'stethoscope', label: 'Medicina General', description: 'Atencion primaria inicial' },

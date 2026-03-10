@@ -21,6 +21,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import { useLanguage } from './localization/LanguageContext';
+import type { RootStackParamList } from './navigation/types';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
@@ -123,6 +124,7 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
   </View>
 );
 
+const PacientePerfilScreen: React.FC = () => {
 
   const { t, tx } = useLanguage();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -259,7 +261,7 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
       if (Platform.OS !== 'web') {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permiso requerido', 'Debes permitir acceso a la galerÃ­a para subir tu foto.');
+          Alert.alert('Permiso requerido', 'Debes permitir acceso a la galería para subir tu foto.');
           return;
         }
       }
@@ -331,7 +333,7 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
 
             <TouchableOpacity style={styles.menuItemRow} onPress={() => navigation.navigate('NuevaConsultaPaciente')}>
               <MaterialIcons name="person-search" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>Buscar MÃ©dico</Text>
+              <Text style={styles.menuText}>Buscar Médico</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.menuItemRow}>
@@ -391,7 +393,7 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
             {tx({ es: 'Perfil del Paciente', en: 'Patient Profile', pt: 'Perfil do Paciente' })}
           </Text>
           <Text style={styles.pageSubtitle}>
-            MantÃ©n tus datos personales, mÃ©dicos y de contacto siempre actualizados.
+            Mantén tus datos personales, médicos y de contacto siempre actualizados.
           </Text>
         </View>
 
@@ -422,7 +424,7 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
               placeholder="Apellidos"
             />
             <ProfileField
-              label="CÃ©dula"
+              label="Cédula"
               value={form.cedula}
               onChangeText={(v) => updateField('cedula', v)}
               placeholder="001-0000000-0"
@@ -434,7 +436,7 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
               placeholder="DD/MM/AAAA"
             />
             <ProfileField
-              label="GÃ©nero"
+              label="Género"
               value={form.genero}
               onChangeText={(v) => updateField('genero', v)}
               placeholder="Hombre / Mujer / Otro"
@@ -505,16 +507,16 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
           </View>
         </ProfileCard>
 
-        <ProfileCard title="Contacto y direcciÃ³n">
+        <ProfileCard title="Contacto y dirección">
           <View style={styles.grid2}>
             <ProfileField
-              label="Correo electrÃ³nico"
+              label="Correo electrónico"
               value={form.email}
               onChangeText={(v) => updateField('email', v)}
               placeholder="correo@ejemplo.com"
             />
             <ProfileField
-              label="TelÃ©fono"
+              label="Teléfono"
               value={form.telefono}
               onChangeText={(v) => updateField('telefono', v)}
               placeholder="+1 809 000 0000"
@@ -522,10 +524,10 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
           </View>
           <View style={styles.blockSpacingTop}>
             <ProfileField
-              label="DirecciÃ³n"
+              label="Dirección"
               value={form.direccion}
               onChangeText={(v) => updateField('direccion', v)}
-              placeholder="Calle, nÃºmero, sector, ciudad"
+              placeholder="Calle, número, sector, ciudad"
             />
           </View>
         </ProfileCard>
@@ -536,7 +538,7 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
             onPress={() => setMedicalOpen((prev) => !prev)}
             activeOpacity={0.85}
           >
-            <Text style={styles.cardTitle}>InformaciÃ³n mÃ©dica relevante</Text>
+            <Text style={styles.cardTitle}>Información médica relevante</Text>
             <MaterialIcons
               name={medicalOpen ? 'expand-less' : 'expand-more'}
               size={22}
@@ -561,10 +563,10 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
                 multiline
               />
               <ProfileField
-                label="Antecedentes mÃ©dicos"
+                label="Antecedentes médicos"
                 value={form.antecedentes}
                 onChangeText={(v) => updateField('antecedentes', v)}
-                placeholder="HipertensiÃ³n, asma, cirugÃ­as previas..."
+                placeholder="Hipertensión, asma, cirugías previas..."
                 multiline
               />
             </>
@@ -607,7 +609,7 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
               <View style={styles.switchRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.switchTitle}>Recibir recordatorios por SMS</Text>
-                  <Text style={styles.switchSubtitle}>Avisos rÃ¡pidos de prÃ³ximas consultas.</Text>
+                  <Text style={styles.switchSubtitle}>Avisos rápidos de próximas consultas.</Text>
                 </View>
                 <Switch
                   value={form.recibirSMS}
@@ -619,8 +621,8 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
 
               <View style={styles.switchRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.switchTitle}>Compartir historial con mÃ©dicos de VIREM</Text>
-                  <Text style={styles.switchSubtitle}>Permite una atenciÃ³n mÃ¡s completa y segura.</Text>
+                  <Text style={styles.switchTitle}>Compartir historial con médicos de VIREM</Text>
+                  <Text style={styles.switchSubtitle}>Permite una atención más completa y segura.</Text>
                 </View>
                 <Switch
                   value={form.compartirHistorial}
@@ -651,7 +653,7 @@ const ProfileCard: React.FC<{ title: string; children: React.ReactNode }> = ({ t
         <View style={styles.successBanner}>
           <MaterialIcons name="verified-user" size={18} color={colors.success} />
           <Text style={styles.successText}>
-            Tus datos son privados y estÃ¡n protegidos con cifrado de nivel mÃ©dico.
+            Tus datos son privados y están protegidos con cifrado de nivel médico.
           </Text>
         </View>
       </ScrollView>

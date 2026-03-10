@@ -50,7 +50,7 @@ const parseUser = (raw: string | null): User | null => {
 
 const PacienteConfiguracionScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { language: appLanguage, setLanguage, t } = useLanguage();
+  const { language: appLanguage, setLanguage, t, tx } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
 
   const [pushEnabled, setPushEnabled] = useState(true);
@@ -140,15 +140,15 @@ const PacienteConfiguracionScreen: React.FC = () => {
 
   const languageLabel = useMemo(() => {
     if (appLanguage === 'en') return 'English (US)';
-    if (appLanguage === 'pt') return 'PortuguÃªs (BR)';
-    return 'EspaÃ±ol (ES)';
+    if (appLanguage === 'pt') return 'Português (BR)';
+    return 'Español (ES)';
   }, [appLanguage]);
 
   const optionsMap = {
     language: [
-      { label: 'EspaÃ±ol (ES)', value: 'es' as const },
+      { label: 'Español (ES)', value: 'es' as const },
       { label: 'English (US)', value: 'en' as const },
-      { label: 'PortuguÃªs (BR)', value: 'pt' as const },
+      { label: 'Português (BR)', value: 'pt' as const },
     ],
     timeFormat: ['24 horas', '12 horas'],
     timeZone: ['(GMT-04:00) Santo Domingo', '(GMT-05:00) Bogota', '(GMT-06:00) Ciudad de Mexico'],

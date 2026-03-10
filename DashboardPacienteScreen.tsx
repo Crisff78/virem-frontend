@@ -21,7 +21,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './navigation/types';
 
-// âœ… Si usas Expo, comenta los imports de abajo y usa:
+// Nota: si usas Expo, comenta los imports de abajo y usa:
 // import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -57,8 +57,8 @@ type User = {
   firstName?: string;
   lastName?: string;
   email?: string;
-  plan?: string;        // "Premium" / "BÃ¡sico"
-  fotoUrl?: string;     // URL de la foto si la subiÃ³
+  plan?: string;        // "Premium" / "Básico"
+  fotoUrl?: string;     // URL de la foto si la subió
 };
 
 type QuickActionProps = {
@@ -182,7 +182,7 @@ const DashboardPacienteScreen: React.FC = () => {
     {
       id: 'n1',
       title: 'Tu consulta empieza en 15 min',
-      text: 'PrepÃ¡rate para la videollamada programada con el especialista.',
+      text: 'Prepárate para la videollamada programada con el especialista.',
       time: '15m',
       icon: 'videocam',
       color: '#137fec',
@@ -191,7 +191,7 @@ const DashboardPacienteScreen: React.FC = () => {
     {
       id: 'n2',
       title: 'Nueva receta disponible',
-      text: 'El Dr. GÃ³mez ha emitido tu receta digital para el tratamiento.',
+      text: 'El Dr. Gómez ha emitido tu receta digital para el tratamiento.',
       time: '1h',
       icon: 'description',
       color: '#22c55e',
@@ -200,7 +200,7 @@ const DashboardPacienteScreen: React.FC = () => {
     {
       id: 'n3',
       title: 'Mensaje del Dr. Ruiz',
-      text: '"Hola, he revisado tus Ãºltimos anÃ¡lisis. Todo parece estar en orden..."',
+      text: '"Hola, he revisado tus últimos análisis. Todo parece estar en orden..."',
       time: '3h',
       icon: 'chat-bubble-outline',
       color: '#4A7FA7',
@@ -209,7 +209,7 @@ const DashboardPacienteScreen: React.FC = () => {
     {
       id: 'n4',
       title: 'Cita confirmada',
-      text: 'Tu cita con DermatologÃ­a ha sido confirmada para el 25 de Octubre.',
+      text: 'Tu cita con Dermatología ha sido confirmada para el 25 de Octubre.',
       time: 'Ayer',
       icon: 'calendar-today',
       color: '#94a3b8',
@@ -221,11 +221,11 @@ const DashboardPacienteScreen: React.FC = () => {
   const [testProgress, setTestProgress] = useState(0);
   const [testRunning, setTestRunning] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'ok' | 'error'>('idle');
-  const [testStatusText, setTestStatusText] = useState('AÃºn no se ha realizado la prueba.');
+  const [testStatusText, setTestStatusText] = useState('Aún no se ha realizado la prueba.');
   const [chatReply, setChatReply] = useState('');
   const chatAnim = useRef(new Animated.Value(0)).current;
 
-  // âœ… Cargar usuario real desde storage (guardado al loguearse)
+  // Cargar usuario real desde storage (guardado al loguearse)
   useEffect(() => {
     const loadUser = async () => {
       try {
@@ -270,7 +270,7 @@ const DashboardPacienteScreen: React.FC = () => {
     return plan ? `Paciente ${plan}` : 'Paciente';
   }, [user]);
 
-  // âœ… Foto: si no hay fotoUrl, usar avatar default
+  // Foto: si no hay fotoUrl, usar avatar default
   const userAvatarSource: ImageSourcePropType = useMemo(() => {
     if (user?.fotoUrl && user.fotoUrl.trim().length > 0) {
       return { uri: user.fotoUrl.trim() };
@@ -278,7 +278,7 @@ const DashboardPacienteScreen: React.FC = () => {
     return DefaultAvatar;
   }, [user]);
 
-  // âœ… Doctores placeholder (esto no depende del usuario)
+  // Doctores placeholder (esto no depende del usuario)
   const Doctor1: ImageSourcePropType = { uri: 'https://i.pravatar.cc/150?img=12' };
   const Doctor2: ImageSourcePropType = { uri: 'https://i.pravatar.cc/150?img=32' };
 
@@ -303,7 +303,7 @@ const DashboardPacienteScreen: React.FC = () => {
   const handleJoinVideoCall = () => {
     Alert.alert(
       'Videollamada',
-      'ConectÃ¡ndote a la videollamada con el Dr. Alejandro GarcÃ­a...'
+      'Conectándote a la videollamada con el Dr. Alejandro García...'
     );
   };
 
@@ -321,7 +321,7 @@ const DashboardPacienteScreen: React.FC = () => {
 
     try {
       if (Platform.OS !== 'web') {
-        // Fallback mÃ³vil: no hay selector nativo de dispositivos por navegador.
+        // Fallback móvil: no hay selector nativo de dispositivos por navegador.
         await new Promise((resolve) => setTimeout(resolve, 700));
         setTestProgress(100);
         setTestStatus('ok');
@@ -331,11 +331,11 @@ const DashboardPacienteScreen: React.FC = () => {
 
       const mediaDevices = (globalThis as any).navigator?.mediaDevices;
       if (!mediaDevices?.getUserMedia || !mediaDevices?.enumerateDevices) {
-        throw new Error('Tu navegador no soporta pruebas de cÃ¡mara/micrÃ³fono.');
+        throw new Error('Tu navegador no soporta pruebas de cámara/micrófono.');
       }
 
       setTestProgress(40);
-      setTestStatusText('Solicitando permisos de cÃ¡mara y micrÃ³fono...');
+      setTestStatusText('Solicitando permisos de cámara y micrófono...');
       const stream = await mediaDevices.getUserMedia({ video: true, audio: true });
 
       setTestProgress(75);
@@ -347,12 +347,12 @@ const DashboardPacienteScreen: React.FC = () => {
       stream.getTracks().forEach((track: any) => track.stop());
 
       if (!hasCam || !hasMic) {
-        throw new Error('No se detectÃ³ cÃ¡mara o micrÃ³fono en el equipo.');
+        throw new Error('No se detectó cámara o micrófono en el equipo.');
       }
 
       setTestProgress(100);
       setTestStatus('ok');
-      setTestStatusText('Prueba completada: cÃ¡mara y micrÃ³fono funcionando.');
+      setTestStatusText('Prueba completada: cámara y micrófono funcionando.');
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'No se pudo completar la prueba.';
       setTestProgress(100);
@@ -385,7 +385,7 @@ const DashboardPacienteScreen: React.FC = () => {
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={{ marginTop: 10, color: colors.muted, fontWeight: '700' }}>
-          Cargando tu informaciÃ³n...
+          Cargando tu información...
         </Text>
       </View>
     );
@@ -411,7 +411,7 @@ const DashboardPacienteScreen: React.FC = () => {
             <Text style={styles.userName}>{fullName}</Text>
             <Text style={styles.userPlan}>{planLabel}</Text>
 
-            {/* âœ… Si no tiene foto, le sugieres subirla (sin inventar) */}
+            {/* Si no tiene foto, se sugiere subirla */}
             {!user?.fotoUrl ? (
               <Text style={styles.hintText}>
                 No tienes foto. Ve a Perfil para agregarla.
@@ -419,7 +419,7 @@ const DashboardPacienteScreen: React.FC = () => {
             ) : null}
           </View>
 
-          {/* MenÃº */}
+          {/* Menú */}
           <View style={styles.menu}>
             <TouchableOpacity style={[styles.menuItemRow, styles.menuItemActive]}>
               <MaterialIcons name="grid-view" size={20} color={colors.primary} />
@@ -472,7 +472,7 @@ const DashboardPacienteScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Cerrar sesiÃ³n */}
+        {/* Cerrar sesión */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <MaterialIcons name="logout" size={20} color="#fff" />
           <Text style={styles.logoutText}>{t('menu.logout')}</Text>
@@ -485,7 +485,7 @@ const DashboardPacienteScreen: React.FC = () => {
           <View style={styles.searchBox}>
             <MaterialIcons name="search" size={20} color={colors.muted} />
             <TextInput
-              placeholder="Busca un mÃ©dico para consulta online"
+              placeholder="Busca un médico para consulta online"
               placeholderTextColor="#8aa7bf"
               style={styles.searchInput}
             />
@@ -499,7 +499,7 @@ const DashboardPacienteScreen: React.FC = () => {
 
         <Text style={styles.title}>Hola, {fullName.split(' ')[0] || 'Paciente'}</Text>
         <Text style={styles.subtitle}>
-          Hoy tienes una cita programada con el equipo de cardiologÃ­a.
+          Hoy tienes una cita programada con el equipo de cardiología.
         </Text>
 
         {/* Card grande */}
@@ -511,11 +511,11 @@ const DashboardPacienteScreen: React.FC = () => {
             </View>
 
             <Text style={styles.bigCardTitle}>
-              PrÃ³xima Videoconsulta: Dr. Alejandro GarcÃ­a
+              Próxima Videoconsulta: Dr. Alejandro García
             </Text>
 
             <Text style={styles.bigCardSub}>
-              CardiologÃ­a Â· Hoy, 16:30 PM (en 15 minutos)
+              Cardiología · Hoy, 16:30 PM (en 15 minutos)
             </Text>
 
             <View style={styles.bigCardActions}>
@@ -535,7 +535,7 @@ const DashboardPacienteScreen: React.FC = () => {
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>Acciones rÃ¡pidas</Text>
+        <Text style={styles.sectionTitle}>Acciones rápidas</Text>
         <View style={styles.quickGrid}>
           <QuickAction
             icon="add-circle"
@@ -570,13 +570,13 @@ const DashboardPacienteScreen: React.FC = () => {
             </View>
 
             <AppointmentCard
-              doctor="Dra. Marta SÃ¡nchez"
-              detail="DermatologÃ­a Â· 24 Oct, 10:00 AM"
+              doctor="Dra. Marta Sánchez"
+              detail="Dermatología · 24 Oct, 10:00 AM"
               avatar={Doctor2}
             />
             <AppointmentCard
               doctor="Dr. Ricardo Ruiz"
-              detail="Medicina General Â· 28 Oct, 09:15 AM"
+              detail="Medicina General · 28 Oct, 09:15 AM"
               avatar={Doctor1}
               simple
             />
@@ -592,12 +592,12 @@ const DashboardPacienteScreen: React.FC = () => {
               <DocRow
                 icon="picture-as-pdf"
                 title="Receta_Medica_Oct2023.pdf"
-                sub="Dra. Marta SÃ¡nchez Â· 24 Oct 2023"
+                sub="Dra. Marta Sánchez · 24 Oct 2023"
               />
               <DocRow
                 icon="analytics"
                 title="Analisis_Sangre_Sept.pdf"
-                sub="Laboratorio Central Â· 15 Sep 2023"
+                sub="Laboratorio Central · 15 Sep 2023"
               />
             </View>
           </View>
@@ -605,7 +605,7 @@ const DashboardPacienteScreen: React.FC = () => {
           <View style={styles.colRight}>
             <Text style={styles.sectionTitle}>Doctores frecuentes</Text>
             <View style={styles.doctorsGrid}>
-              <DoctorCard name="Dr. Alejandro GarcÃ­a" spec="CardiologÃ­a" avatar={Doctor1} />
+              <DoctorCard name="Dr. Alejandro García" spec="Cardiología" avatar={Doctor1} />
               <DoctorCard name="Dr. Ricardo Ruiz" spec="Med. General" avatar={Doctor2} />
             </View>
           </View>
@@ -616,21 +616,21 @@ const DashboardPacienteScreen: React.FC = () => {
             <View style={styles.summaryIconBox}>
               <MaterialCommunityIcons name="history" size={18} color="#fff" />
             </View>
-            <Text style={styles.summaryTitle}>Resumen de Ãºltima consulta</Text>
+            <Text style={styles.summaryTitle}>Resumen de última consulta</Text>
           </View>
 
           <View style={styles.summaryInner}>
             <View style={styles.rowBetween}>
               <View>
-                <Text style={styles.summaryLabel}>DiagnÃ³stico Principal</Text>
-                <Text style={styles.summaryDiag}>Gripe comÃºn estacional</Text>
+                <Text style={styles.summaryLabel}>Diagnóstico Principal</Text>
+                <Text style={styles.summaryDiag}>Gripe común estacional</Text>
               </View>
               <Text style={styles.summaryDate}>12 Oct 2023</Text>
             </View>
 
             <Text style={styles.summaryText}>
-              Paciente presenta sÃ­ntomas de resfriado leve. Se recomienda descanso, hidrataciÃ³n constante
-              y el uso de analgÃ©sicos segÃºn receta adjunta. RevisiÃ³n en 5 dÃ­as si los sÃ­ntomas persisten.
+              Paciente presenta síntomas de resfriado leve. Se recomienda descanso, hidratación constante
+              y el uso de analgésicos según receta adjunta. Revisión en 5 días si los síntomas persisten.
             </Text>
           </View>
         </View>
@@ -671,12 +671,12 @@ const DashboardPacienteScreen: React.FC = () => {
           <View style={styles.chatBody}>
             <View style={styles.msgLeft}>
               <Text style={styles.msgLeftText}>
-                Hola {fullName.split(' ')[0] || 'Paciente'}, Â¿has podido completar los anÃ¡lisis?
+                Hola {fullName.split(' ')[0] || 'Paciente'}, ¿has podido completar los análisis?
               </Text>
             </View>
 
             <View style={styles.msgRight}>
-              <Text style={styles.msgRightText}>SÃ­ Doctor, se los enviÃ© por el portal esta maÃ±ana.</Text>
+              <Text style={styles.msgRightText}>Sí Doctor, se los envié por el portal esta mañana.</Text>
             </View>
           </View>
 
@@ -713,7 +713,7 @@ const DashboardPacienteScreen: React.FC = () => {
               <View style={styles.notificationsSubhead}>
                 <Text style={styles.notificationsSubheadText}>Recientes</Text>
                 <TouchableOpacity onPress={markAllNotificationsRead}>
-                  <Text style={styles.markReadText}>Marcar como leÃ­das</Text>
+                  <Text style={styles.markReadText}>Marcar como leídas</Text>
                 </TouchableOpacity>
               </View>
 
@@ -768,12 +768,12 @@ const DashboardPacienteScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.prepTitle}>PrepÃ¡rate para tu videollamada</Text>
-            <Text style={styles.prepSub}>Con el Dr. Alejandro GarcÃ­a â€¢ CardiologÃ­a</Text>
+            <Text style={styles.prepTitle}>Prepárate para tu videollamada</Text>
+            <Text style={styles.prepSub}>Con el Dr. Alejandro García • Cardiología</Text>
 
             <View style={styles.prepGrid}>
               <View style={styles.prepCard}>
-                <Text style={styles.prepCardTitle}>Lista de verificaciÃ³n</Text>
+                <Text style={styles.prepCardTitle}>Lista de verificación</Text>
 
                 <TouchableOpacity style={styles.prepItem} onPress={() => togglePrepItem(0)}>
                   <MaterialIcons
@@ -782,8 +782,8 @@ const DashboardPacienteScreen: React.FC = () => {
                     color={prepItems[0] ? colors.primary : colors.light}
                   />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.prepItemTitle}>ConexiÃ³n a internet estable</Text>
-                    <Text style={styles.prepItemSub}>AsegÃºrate de tener buena seÃ±al Wi-Fi o datos mÃ³viles.</Text>
+                    <Text style={styles.prepItemTitle}>Conexión a internet estable</Text>
+                    <Text style={styles.prepItemSub}>Asegúrate de tener buena señal Wi-Fi o datos móviles.</Text>
                   </View>
                 </TouchableOpacity>
 
@@ -794,8 +794,8 @@ const DashboardPacienteScreen: React.FC = () => {
                     color={prepItems[1] ? colors.primary : colors.light}
                   />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.prepItemTitle}>CÃ¡mara y micrÃ³fono funcionando</Text>
-                    <Text style={styles.prepItemSub}>El navegador te pedirÃ¡ permisos para acceder a ellos.</Text>
+                    <Text style={styles.prepItemTitle}>Cámara y micrófono funcionando</Text>
+                    <Text style={styles.prepItemSub}>El navegador te pedirá permisos para acceder a ellos.</Text>
                   </View>
                 </TouchableOpacity>
 
@@ -818,14 +818,14 @@ const DashboardPacienteScreen: React.FC = () => {
                     color={prepItems[3] ? colors.primary : colors.light}
                   />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.prepItemTitle}>Ten a mano tus exÃ¡menes o recetas</Text>
-                    <Text style={styles.prepItemSub}>FacilitarÃ¡ la consulta si el doctor necesita revisarlos.</Text>
+                    <Text style={styles.prepItemTitle}>Ten a mano tus exámenes o recetas</Text>
+                    <Text style={styles.prepItemSub}>Facilitará la consulta si el doctor necesita revisarlos.</Text>
                   </View>
                 </TouchableOpacity>
               </View>
 
               <View style={styles.prepCard}>
-                <Text style={styles.prepCardTitle}>Prueba tÃ©cnica</Text>
+                <Text style={styles.prepCardTitle}>Prueba técnica</Text>
                 <View style={styles.testBox}>
                   <MaterialIcons
                     name={testStatus === 'ok' ? 'check-circle' : testStatus === 'error' ? 'error-outline' : 'camera-alt'}
@@ -864,7 +864,7 @@ const DashboardPacienteScreen: React.FC = () => {
                 </TouchableOpacity>
 
                 <Text style={styles.readySub}>
-                  SerÃ¡s redirigido a la sala de espera privada hasta que el doctor inicie la sesiÃ³n.
+                  Serás redirigido a la sala de espera privada hasta que el doctor inicie la sesión.
                 </Text>
               </View>
             </View>
