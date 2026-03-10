@@ -6,10 +6,10 @@
     "description": "App de citas médicas con médicos, pacientes, chat, videollamadas y pagos",
     "primaryColor": "#007bff",
     "orientation": "portrait",
-    "icon": "./assets/imagenes/icon.png",
+    "icon": "./assets/imagenes/descarga.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/imagenes/splash-icon.png",
+      "image": "./assets/imagenes/descarga.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -21,12 +21,12 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/imagenes/adaptive-icon.png",
+        "foregroundImage": "./assets/imagenes/descarga.png",
         "backgroundColor": "#ffffff"
       }
     },
     "web": {
-      "favicon": "./assets/imagenes/favicon.png"
+      "favicon": "./assets/imagenes/descarga.png"
     },
     "plugins": [
       "expo-font",

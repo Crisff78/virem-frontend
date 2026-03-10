@@ -1,5 +1,6 @@
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import * as Linking from "expo-linking";
 import React from "react";
 
 import EstablecerNuevaContrasenaScreen from "./EstablecerNuevaContrasenaScreen";
@@ -24,10 +25,34 @@ import PacientePerfilScreen from "./PacientePerfilScreen";
 import { RootStackParamList } from "./navigation/types";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const linking = {
+  prefixes: [Linking.createURL("/")],
+  config: {
+    screens: {
+      SeleccionPerfil: "",
+      Login: "login",
+      RecuperarContrasena: "recuperar-contrasena",
+      VerificarIdentidad: "verificar-identidad/:email",
+      EstablecerNuevaContrasena: "nueva-contrasena/:email",
+      RegistroPaciente: "registro-paciente",
+      RegistroMedico: "registro-medico",
+      RegistroCredenciales: "registro-credenciales",
+      RegistroCredencialesMedico: "registro-credenciales-medico",
+      DashboardPaciente: "dashboard-paciente",
+      PacienteRecetasDocumentos: "paciente-recetas-documentos",
+      PacientePerfil: "paciente-perfil",
+      NuevaConsultaPaciente: "nueva-consulta",
+      SalaEsperaVirtualPaciente: "sala-espera",
+      EspecialistasPorEspecialidad: "especialistas/:specialty",
+      PerfilEspecialistaAgendar: "perfil-especialista/:specialty/:doctorId",
+      DashboardMedico: "dashboard-medico",
+    },
+  },
+};
 
 const App: React.FC = () => {
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <Stack.Navigator
         id="RootStack"
         initialRouteName="SeleccionPerfil"
