@@ -158,19 +158,19 @@ const RecuperarContrasenaScreen: React.FC = () => {
     const cleanedEmail = emailOrPhone.toLowerCase().trim();
 
     if (!cleanedEmail) {
-      Alert.alert('Atención', 'Por favor, ingresa tu correo electrónico.');
+      Alert.alert('Atencion', 'Por favor, ingresa tu correo electronico.');
       return;
     }
 
     if (!isValidEmail(cleanedEmail)) {
-      Alert.alert('Atención', 'Ingresa un correo electrónico válido.');
+      Alert.alert('Atencion', 'Ingresa un correo electronico valido.');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const response = await fetch(apiUrl('/enviar-codigo'), {
+      const response = await fetch(apiUrl('/api/auth/recovery/send-code'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -179,17 +179,17 @@ const RecuperarContrasenaScreen: React.FC = () => {
         body: JSON.stringify({ email: cleanedEmail }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
-      if (response.ok && data.success) {
+      if (response.ok && data?.success) {
         navigation.navigate('VerificarIdentidad', { email: cleanedEmail });
       } else {
-        Alert.alert('Error', data.message || 'El correo ingresado no está registrado.');
+        Alert.alert('Error', data?.message || 'No se pudo enviar el codigo de recuperacion.');
       }
     } catch (error) {
       Alert.alert(
-        'Error de Conexión',
-        'No se pudo contactar al servidor. Revisa si el backend está encendido y la URL configurada.'
+        'Error de Conexion',
+        'No se pudo contactar al servidor. Revisa si el backend esta encendido y la URL configurada.'
       );
     } finally {
       setIsLoading(false);
@@ -208,14 +208,14 @@ const RecuperarContrasenaScreen: React.FC = () => {
         </View>
 
         <View style={styles.headerText}>
-          <Text style={styles.title}>Recuperar Contraseña</Text>
+          <Text style={styles.title}>Recuperar Contrasena</Text>
           <Text style={styles.subtitle}>
-            Ingresa tu correo electrónico asociado a tu cuenta para recibir un código de
+            Ingresa tu correo electronico asociado a tu cuenta para recibir un codigo de
             restablecimiento.
           </Text>
         </View>
 
-        <Text style={styles.labelText}>Correo electrónico</Text>
+        <Text style={styles.labelText}>Correo electronico</Text>
         <View style={styles.inputGroup}>
           <TextInput
             style={styles.input}
@@ -238,12 +238,12 @@ const RecuperarContrasenaScreen: React.FC = () => {
           {isLoading ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text style={styles.buttonText}>Enviar Código</Text>
+            <Text style={styles.buttonText}>Enviar Codigo</Text>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.backToLoginLink} onPress={handleBackToLogin}>
-          <Text style={styles.backToLoginText}>Volver al Inicio de Sesión</Text>
+          <Text style={styles.backToLoginText}>Volver al Inicio de Sesion</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -251,3 +251,4 @@ const RecuperarContrasenaScreen: React.FC = () => {
 };
 
 export default RecuperarContrasenaScreen;
+

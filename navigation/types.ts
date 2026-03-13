@@ -14,6 +14,8 @@ export type DatosPersonalesMedico = {
   especialidad: string;
   cedula: string;
   telefono: string;
+  fotoUrl?: string;
+  exequaturValidationToken?: string;
 };
 
 export type RootStackParamList = {
@@ -51,4 +53,5 @@ export type RootStackParamList = {
   EspecialistasPorEspecialidad: { specialty: string };
   PerfilEspecialistaAgendar: { specialty: string; doctorId: string };
   DashboardMedico: undefined;
+  MedicoPerfil: undefined;
 };

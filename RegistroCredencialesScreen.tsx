@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { RootStackParamList } from './navigation/types';
 import { BACKEND_URL, apiUrl } from './config/backend';
-import { isStrongPassword, isValidEmail } from './utils/validation';
+import { isStrongPassword, isValidEmail, passwordChecks } from './utils/validation';
 
 type NavigationProps = NativeStackNavigationProp<RootStackParamList, 'RegistroCredenciales'>;
 type RegistroRouteProp = RouteProp<RootStackParamList, 'RegistroCredenciales'>;
@@ -33,7 +33,16 @@ const colors = {
   blueGray: '#4A7FA7',
   white: '#FFFFFF',
   slate50: '#f8fafc',
+  success: '#16a34a',
+  muted: '#94a3b8',
 };
+
+const PASSWORD_RULES = [
+  { key: 'minLength', label: 'Minimo 8 caracteres' },
+  { key: 'hasUppercase', label: 'Al menos 1 mayuscula (A-Z)' },
+  { key: 'hasNumber', label: 'Al menos 1 numero (0-9)' },
+  { key: 'hasSpecial', label: 'Al menos 1 simbolo (!@#...)' },
+] as const;
 
 type DatosPaciente = {
   nombres: string;
@@ -74,6 +83,7 @@ const RegistroCredencialesScreen: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const passwordRuleState = useMemo(() => passwordChecks(password), [password]);
 
   const handleFinish = async () => {
     if (!route.params?.datosPersonales) {
@@ -215,6 +225,22 @@ const RegistroCredencialesScreen: React.FC = () => {
               </View>
             </View>
 
+            <View style={styles.passwordRulesBox}>
+              {PASSWORD_RULES.map((rule) => {
+                const ok = Boolean(passwordRuleState[rule.key]);
+                return (
+                  <View key={rule.key} style={styles.passwordRuleItem}>
+                    <MaterialIcons
+                      name={ok ? 'check-circle' : 'radio-button-unchecked'}
+                      size={16}
+                      color={ok ? colors.success : colors.muted}
+                    />
+                    <Text style={[styles.passwordRuleText, ok && styles.passwordRuleTextOk]}>{rule.label}</Text>
+                  </View>
+                );
+              })}
+            </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Confirmar Contraseña</Text>
               <View style={styles.inputContainer}>
@@ -286,6 +312,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.slate50,
   },
   textInput: { flex: 1, fontSize: 16, color: colors.navyDark },
+  passwordRulesBox: {
+    backgroundColor: colors.slate50,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: -6,
+    marginBottom: 16,
+  },
+  passwordRuleItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  passwordRuleText: { marginLeft: 8, fontSize: 12, color: colors.blueGray },
+  passwordRuleTextOk: { color: colors.success, fontWeight: '600' },
 
   btnPrimary: {
     backgroundColor: colors.primary,

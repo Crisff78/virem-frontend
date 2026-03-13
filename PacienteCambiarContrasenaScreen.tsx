@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   View,
   Text,
@@ -18,12 +19,15 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import type { RootStackParamList } from './navigation/types';
 import { useLanguage } from './localization/LanguageContext';
+import { apiUrl } from './config/backend';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
 
 const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
+const AUTH_TOKEN_KEY = 'authToken';
+const LEGACY_TOKEN_KEY = 'token';
 
 type User = {
   nombres?: string;
@@ -56,6 +60,7 @@ const PacienteCambiarContrasenaScreen: React.FC = () => {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -118,7 +123,22 @@ const PacienteCambiarContrasenaScreen: React.FC = () => {
     return tx({ es: 'Fuerte', en: 'Strong', pt: 'Forte' });
   }, [passwordChecks.score, tx]);
 
-  const handleUpdatePassword = () => {
+  const getAuthToken = async () => {
+    if (Platform.OS === 'web') {
+      const webToken = localStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
+      return String(webToken || '').trim();
+    }
+
+    const secureToken =
+      (await SecureStore.getItemAsync(AUTH_TOKEN_KEY)) ||
+      (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
+    if (secureToken) return String(secureToken).trim();
+
+    const asyncToken = await AsyncStorage.getItem(LEGACY_TOKEN_KEY);
+    return String(asyncToken || '').trim();
+  };
+
+  const handleUpdatePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       Alert.alert(
         tx({ es: 'Campos incompletos', en: 'Incomplete fields', pt: 'Campos incompletos' }),
@@ -155,20 +175,85 @@ const PacienteCambiarContrasenaScreen: React.FC = () => {
       return;
     }
 
-    Alert.alert(
-      tx({ es: 'Contrasena actualizada', en: 'Password updated', pt: 'Senha atualizada' }),
-      tx({
-        es: 'Tu contrasena fue actualizada correctamente.',
-        en: 'Your password was updated successfully.',
-        pt: 'Sua senha foi atualizada com sucesso.',
-      }),
-      [{ text: 'OK', onPress: () => navigation.goBack() }]
-    );
+    const token = await getAuthToken();
+    if (!token) {
+      Alert.alert(
+        tx({ es: 'Sesion expirada', en: 'Session expired', pt: 'Sessao expirada' }),
+        tx({
+          es: 'Inicia sesion nuevamente para cambiar tu contrasena.',
+          en: 'Sign in again to change your password.',
+          pt: 'Faca login novamente para alterar sua senha.',
+        })
+      );
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch(apiUrl('/api/users/me/password'), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.success) {
+        Alert.alert(
+          tx({ es: 'Error', en: 'Error', pt: 'Erro' }),
+          data?.message ||
+            tx({
+              es: 'No se pudo actualizar la contrasena.',
+              en: 'Could not update password.',
+              pt: 'Nao foi possivel atualizar a senha.',
+            })
+        );
+        return;
+      }
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      Alert.alert(
+        tx({ es: 'Contrasena actualizada', en: 'Password updated', pt: 'Senha atualizada' }),
+        tx({
+          es: 'Tu contrasena fue actualizada correctamente.',
+          en: 'Your password was updated successfully.',
+          pt: 'Sua senha foi atualizada com sucesso.',
+        }),
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch {
+      Alert.alert(
+        tx({ es: 'Error de red', en: 'Network error', pt: 'Erro de rede' }),
+        tx({
+          es: 'No se pudo conectar al servidor.',
+          en: 'Could not connect to the server.',
+          pt: 'Nao foi possivel conectar ao servidor.',
+        })
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem(LEGACY_TOKEN_KEY);
     await AsyncStorage.removeItem(STORAGE_KEY);
+    if (Platform.OS === 'web') {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(LEGACY_TOKEN_KEY);
+      localStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+    } else {
+      await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+      await SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY);
+      await SecureStore.deleteItemAsync(LEGACY_USER_STORAGE_KEY);
+    }
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
@@ -318,10 +403,18 @@ const PacienteCambiarContrasenaScreen: React.FC = () => {
               </View>
             </View>
 
-            <TouchableOpacity style={styles.primaryButton} onPress={handleUpdatePassword}>
-              <Text style={styles.primaryButtonText}>
-                {tx({ es: 'Actualizar Contrasena', en: 'Update Password', pt: 'Atualizar Senha' })}
-              </Text>
+            <TouchableOpacity
+              style={[styles.primaryButton, saving ? { opacity: 0.75 } : null]}
+              onPress={handleUpdatePassword}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.primaryButtonText}>
+                  {tx({ es: 'Actualizar Contrasena', en: 'Update Password', pt: 'Atualizar Senha' })}
+                </Text>
+              )}
             </TouchableOpacity>
 
             <Text style={styles.helpText}>

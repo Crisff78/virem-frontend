@@ -17,16 +17,19 @@ import * as SecureStore from 'expo-secure-store';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 
 import { useLanguage } from './localization/LanguageContext';
 import type { RootStackParamList } from './navigation/types';
+import { apiUrl } from './config/backend';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
 
 const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
+const AUTH_TOKEN_KEY = 'authToken';
+const LEGACY_TOKEN_KEY = 'token';
 
 const Doctor1: ImageSourcePropType = { uri: 'https://i.pravatar.cc/240?img=12' };
 const Doctor2: ImageSourcePropType = { uri: 'https://i.pravatar.cc/240?img=32' };
@@ -65,6 +68,35 @@ const parseUser = (raw: string | null): User | null => {
     return JSON.parse(raw);
   } catch {
     return null;
+  }
+};
+
+const isSameCalendarDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() &&
+  a.getMonth() === b.getMonth() &&
+  a.getDate() === b.getDate();
+
+const getAuthToken = async (): Promise<string> => {
+  try {
+    if (Platform.OS === 'web') {
+      return (
+        localStorage.getItem(AUTH_TOKEN_KEY) ||
+        localStorage.getItem(LEGACY_TOKEN_KEY) ||
+        ''
+      ).trim();
+    }
+
+    const secureToken =
+      (await SecureStore.getItemAsync(AUTH_TOKEN_KEY)) ||
+      (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
+    if (secureToken && secureToken.trim()) return secureToken.trim();
+
+    const asyncToken =
+      (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) ||
+      (await AsyncStorage.getItem(LEGACY_TOKEN_KEY));
+    return String(asyncToken || '').trim();
+  } catch {
+    return '';
   }
 };
 
@@ -132,8 +164,9 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootStackParamList, 'PerfilEspecialistaAgendar'>>();
   const [user, setUser] = useState<User | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
-  const [selectedDay, setSelectedDay] = useState(4);
-  const [selectedTime, setSelectedTime] = useState('10:30');
+  const [selectedDayOffset, setSelectedDayOffset] = useState(0);
+  const [selectedTime, setSelectedTime] = useState('');
+  const [creatingCita, setCreatingCita] = useState(false);
 
   const specialty = route.params?.specialty || 'Cardiologia';
   const doctor = useMemo(() => {
@@ -143,6 +176,61 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
       doctorProfiles[0]
     );
   }, [route.params?.doctorId, specialty]);
+
+  const availableDays = useMemo(() => {
+    const now = new Date();
+    const list: Date[] = [];
+    for (let offset = 0; offset < 10; offset += 1) {
+      list.push(new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset));
+    }
+    return list;
+  }, []);
+
+  const selectedDate = useMemo(
+    () => availableDays[selectedDayOffset] || availableDays[0] || new Date(),
+    [availableDays, selectedDayOffset]
+  );
+
+  const timeSlots = useMemo(
+    () => ['09:00', '10:30', '12:00', '15:30', '16:15', '18:00', '20:00'],
+    []
+  );
+
+  const availableTimes = useMemo(() => {
+    const now = new Date();
+    return timeSlots.filter((slot) => {
+      if (!isSameCalendarDay(selectedDate, now)) return true;
+
+      const [hourRaw, minuteRaw] = slot.split(':');
+      const hour = Number.parseInt(hourRaw || '', 10);
+      const minute = Number.parseInt(minuteRaw || '', 10);
+      if (!Number.isFinite(hour) || !Number.isFinite(minute)) return false;
+
+      const candidate = new Date(selectedDate);
+      candidate.setHours(hour, minute, 0, 0);
+      return candidate.getTime() >= now.getTime() + 10 * 60 * 1000;
+    });
+  }, [selectedDate, timeSlots]);
+
+  useEffect(() => {
+    if (!availableTimes.length) {
+      setSelectedTime('');
+      return;
+    }
+
+    if (!availableTimes.includes(selectedTime)) {
+      setSelectedTime(availableTimes[0]);
+    }
+  }, [availableTimes, selectedTime]);
+
+  const selectedMonthLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat('es-DO', {
+        month: 'long',
+        year: 'numeric',
+      }).format(selectedDate),
+    [selectedDate]
+  );
 
   useEffect(() => {
     const loadUser = async () => {
@@ -198,6 +286,92 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
+  const handleCreateAppointment = async () => {
+    if (!selectedTime) {
+      Alert.alert('Horario no disponible', 'Selecciona otro dia u horario para continuar.');
+      return;
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      Alert.alert('Sesion expirada', 'Inicia sesion nuevamente para agendar tu cita.');
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+      return;
+    }
+
+    const [hourRaw, minuteRaw] = selectedTime.split(':');
+    const hour = Number.parseInt(hourRaw || '', 10);
+    const minute = Number.parseInt(minuteRaw || '', 10);
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+      Alert.alert('Horario invalido', 'Selecciona un horario valido.');
+      return;
+    }
+
+    const appointmentDate = new Date(selectedDate);
+    appointmentDate.setHours(hour, minute, 0, 0);
+
+    setCreatingCita(true);
+    try {
+      const response = await fetch(apiUrl('/api/users/me/citas'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          fechaHoraInicio: appointmentDate.toISOString(),
+          duracionMin: 30,
+          nota: `Solicitud desde portal paciente - ${doctor.focus}`,
+          especialidad: specialty,
+          nombreMedico: doctor.name,
+          precio: Number.parseFloat(String(doctor.price || '')),
+        }),
+      });
+
+      const raw = await response.text();
+      let payload: any = null;
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        payload = null;
+      }
+
+      if (!response.ok || !payload?.success) {
+        Alert.alert('No se pudo agendar', payload?.message || 'Intenta nuevamente en unos minutos.');
+        return;
+      }
+
+      const finalDateRaw = payload?.cita?.fechaHoraInicio || appointmentDate.toISOString();
+      const finalDate = new Date(finalDateRaw);
+      const finalDateText = new Intl.DateTimeFormat('es-DO', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(finalDate);
+      const medicoAsignado = String(payload?.medico?.nombreCompleto || doctor.name).trim();
+
+      Alert.alert(
+        'Cita agendada',
+        `Tu cita quedo creada con ${medicoAsignado} para ${finalDateText}.`
+      );
+      navigation.navigate('DashboardPaciente');
+    } catch {
+      Alert.alert('Error de red', 'No se pudo conectar con el backend para crear la cita.');
+    } finally {
+      setCreatingCita(false);
+    }
+  };
+
+  if (loadingUser) {
+    return (
+      <View style={styles.loaderWrap}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loaderText}>Cargando informacion...</Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.container}>
       <View style={styles.sidebar}>
@@ -377,44 +551,63 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
                 <View style={styles.bookingBody}>
                   <Text style={styles.sectionTitle}>Selecciona fecha de cita</Text>
                   <View style={styles.calendarCard}>
-                    <Text style={styles.calendarMonth}>Noviembre 2024</Text>
+                    <Text style={styles.calendarMonth}>{selectedMonthLabel}</Text>
                     <View style={styles.daysGrid}>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((day) => (
+                      {availableDays.map((day, index) => (
                         <TouchableOpacity
-                          key={day}
-                          style={[styles.dayBtn, selectedDay === day && styles.dayBtnActive]}
-                          onPress={() => setSelectedDay(day)}
+                          key={`${day.toISOString()}-${index}`}
+                          style={[styles.dayBtn, selectedDayOffset === index && styles.dayBtnActive]}
+                          onPress={() => setSelectedDayOffset(index)}
                         >
-                          <Text style={[styles.dayText, selectedDay === day && styles.dayTextActive]}>{day}</Text>
+                          <Text
+                            style={[
+                              styles.dayText,
+                              selectedDayOffset === index && styles.dayTextActive,
+                            ]}
+                          >
+                            {day.getDate()}
+                          </Text>
                         </TouchableOpacity>
                       ))}
                     </View>
                   </View>
 
                   <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Horarios disponibles</Text>
-                  <View style={styles.timeGrid}>
-                    {['09:00', '10:30', '12:00', '15:30', '16:15', '18:00'].map((time) => (
-                      <TouchableOpacity
-                        key={time}
-                        style={[styles.timeBtn, selectedTime === time && styles.timeBtnActive]}
-                        onPress={() => setSelectedTime(time)}
-                      >
-                        <Text style={[styles.timeText, selectedTime === time && styles.timeTextActive]}>{time}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  {availableTimes.length ? (
+                    <View style={styles.timeGrid}>
+                      {availableTimes.map((time) => (
+                        <TouchableOpacity
+                          key={time}
+                          style={[styles.timeBtn, selectedTime === time && styles.timeBtnActive]}
+                          onPress={() => setSelectedTime(time)}
+                        >
+                          <Text style={[styles.timeText, selectedTime === time && styles.timeTextActive]}>
+                            {time}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : (
+                    <View style={styles.noTimeWrap}>
+                      <Text style={styles.noTimeText}>
+                        No hay horarios disponibles para este dia.
+                      </Text>
+                    </View>
+                  )}
 
                   <TouchableOpacity
-                    style={styles.confirmBtn}
-                    onPress={() =>
-                      Alert.alert(
-                        'Cita agendada',
-                        `Cita con ${doctor.name} el ${selectedDay}/11/2024 a las ${selectedTime}.`
-                      )
-                    }
+                    style={[styles.confirmBtn, (creatingCita || !selectedTime) && styles.confirmBtnDisabled]}
+                    onPress={handleCreateAppointment}
+                    disabled={creatingCita || !selectedTime}
                   >
-                    <Text style={styles.confirmText}>Confirmar y Agendar</Text>
-                    <MaterialIcons name="event-available" size={16} color="#fff" />
+                    {creatingCita ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <>
+                        <Text style={styles.confirmText}>Confirmar y Agendar</Text>
+                        <MaterialIcons name="event-available" size={16} color="#fff" />
+                      </>
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -647,6 +840,16 @@ const styles = StyleSheet.create({
   timeBtnActive: { borderColor: colors.blue, borderWidth: 2, backgroundColor: '#f2f8ff' },
   timeText: { color: colors.muted, fontWeight: '800', fontSize: 11 },
   timeTextActive: { color: colors.blue },
+  noTimeWrap: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#d7e5f4',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#f9fcff',
+  },
+  noTimeText: { color: colors.muted, fontSize: 12, fontWeight: '700', textAlign: 'center' },
   confirmBtn: {
     marginTop: 14,
     backgroundColor: colors.blue,
@@ -656,6 +859,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  confirmBtnDisabled: {
+    opacity: 0.65,
   },
   confirmText: { color: '#fff', fontWeight: '900', fontSize: 14 },
 });

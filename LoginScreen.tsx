@@ -15,6 +15,7 @@ import {
 
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 import { RootStackParamList } from './navigation/types';
@@ -24,6 +25,7 @@ import { isValidEmail } from './utils/validation';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
+const MEDICO_CACHE_BY_EMAIL_KEY = 'medicoProfileByEmail';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -39,23 +41,66 @@ const COLORS = {
 };
 
 async function saveSession(token?: string, userProfile?: any) {
-  // ✅ Web: usar localStorage (SecureStore suele fallar en web)
+  // Web: usar localStorage (SecureStore suele fallar en web)
   if (Platform.OS === 'web') {
     try {
-      if (token) localStorage.setItem('authToken', token);
-      if (userProfile) localStorage.setItem('userProfile', JSON.stringify(userProfile));
+      if (token) {
+        localStorage.setItem('authToken', token);
+        localStorage.setItem('token', token);
+      }
+      if (userProfile) {
+        localStorage.setItem('userProfile', JSON.stringify(userProfile));
+        localStorage.setItem('user', JSON.stringify(userProfile));
+      }
     } catch (e) {
-      console.log('⚠️ localStorage falló:', e);
+      console.log('localStorage fallo:', e);
     }
     return;
   }
 
-  // ✅ Mobile: SecureStore
+  // Mobile: SecureStore
   try {
-    if (token) await SecureStore.setItemAsync('authToken', token);
-    if (userProfile) await SecureStore.setItemAsync('userProfile', JSON.stringify(userProfile));
+    if (token) {
+      await SecureStore.setItemAsync('authToken', token);
+      await SecureStore.setItemAsync('token', token);
+      await AsyncStorage.setItem('token', token);
+    }
+    if (userProfile) {
+      const rawProfile = JSON.stringify(userProfile);
+      await SecureStore.setItemAsync('userProfile', rawProfile);
+      await AsyncStorage.setItem('user', rawProfile);
+    }
   } catch (e) {
-    console.log('⚠️ SecureStore falló:', e);
+    console.log('SecureStore fallo:', e);
+  }
+}
+
+async function getCachedMedicoProfileByEmail(email: string) {
+  const key = String(email || '').trim().toLowerCase();
+  if (!key) return null;
+
+  try {
+    const rawMap =
+      Platform.OS === 'web'
+        ? localStorage.getItem(MEDICO_CACHE_BY_EMAIL_KEY)
+        : await SecureStore.getItemAsync(MEDICO_CACHE_BY_EMAIL_KEY);
+
+    if (!rawMap) return null;
+    const map = JSON.parse(rawMap) as Record<
+      string,
+      {
+        nombreCompleto?: string;
+        especialidad?: string;
+        fotoUrl?: string;
+        cedula?: string;
+        telefono?: string;
+        genero?: string;
+        fechanacimiento?: string;
+      }
+    >;
+    return map[key] || null;
+  } catch {
+    return null;
   }
 }
 
@@ -70,12 +115,12 @@ const LoginScreen: React.FC = () => {
     const emailTrim = email.toLowerCase().trim();
 
     if (!emailTrim || !password) {
-      Alert.alert('Error', 'Completa correo y contraseña.');
+      Alert.alert('Error', 'Completa correo y contrasena.');
       return;
     }
 
     if (!isValidEmail(emailTrim)) {
-      Alert.alert('Error', 'El correo no tiene un formato válido.');
+      Alert.alert('Error', 'El correo no tiene un formato valido.');
       return;
     }
 
@@ -96,7 +141,7 @@ const LoginScreen: React.FC = () => {
         body: JSON.stringify({ email: emailTrim, password }),
       });
 
-      // ✅ leer texto primero evita crashes de json
+      // Leer texto primero evita crashes de json
       const raw = await response.text();
       console.log('HTTP:', response.status);
       console.log('RAW:', raw);
@@ -109,29 +154,43 @@ const LoginScreen: React.FC = () => {
       }
 
       if (!response.ok || !data?.success) {
-        Alert.alert('Error', data?.message || `Login falló (HTTP ${response.status}).`);
+        Alert.alert('Error', data?.message || `Login fallo (HTTP ${response.status}).`);
         return;
       }
 
       const token = data?.token ?? data?.data?.token ?? '';
       const userProfile = data?.user ?? data?.data?.user ?? null;
+      const cachedMedico = await getCachedMedicoProfileByEmail(emailTrim);
+      const mergedProfile =
+        cachedMedico && userProfile
+          ? {
+              ...userProfile,
+              nombreCompleto: userProfile?.nombreCompleto || cachedMedico?.nombreCompleto,
+              especialidad: userProfile?.especialidad || cachedMedico?.especialidad,
+              fotoUrl: userProfile?.fotoUrl || cachedMedico?.fotoUrl,
+              cedula: userProfile?.cedula || cachedMedico?.cedula,
+              telefono: userProfile?.telefono || cachedMedico?.telefono,
+              genero: userProfile?.genero || cachedMedico?.genero,
+              fechanacimiento: userProfile?.fechanacimiento || cachedMedico?.fechanacimiento,
+            }
+          : userProfile;
 
-      // ✅ Guardar sesión sin bloquear navegación
-      await saveSession(token, userProfile);
-      const rolid = Number(userProfile?.rolid);
+      // Guardar sesion sin bloquear navegacion
+      await saveSession(token, mergedProfile);
+      const rolid = Number(mergedProfile?.rolid);
       const targetRoute: keyof RootStackParamList = rolid === 2 ? 'DashboardMedico' : 'DashboardPaciente';
 
       console.log(`Login OK -> ${targetRoute} (rolid=${rolid || 'N/A'})`);
 
       navigation.reset({ index: 0, routes: [{ name: targetRoute }] });
 
-      // ✅ opcional: mostrar mensaje DESPUÉS (no bloquea navegación)
+      // Opcional: mostrar mensaje despues (no bloquea navegacion)
       setTimeout(() => {
-        Alert.alert('✅ Éxito', 'Iniciaste sesión correctamente.');
+        Alert.alert('Exito', 'Iniciaste sesion correctamente.');
       }, 200);
 
     } catch (err: any) {
-      console.log('❌ ERROR LOGIN:', err?.message || err);
+      console.log('ERROR LOGIN:', err?.message || err);
       Alert.alert(
         'Error de red',
         `No se pudo conectar al backend.\n\nBackend actual: ${BACKEND_URL}`
@@ -161,7 +220,7 @@ const LoginScreen: React.FC = () => {
           </Text>
 
           <View style={styles.form}>
-            <Text style={styles.inputLabel}>Correo Electrónico</Text>
+            <Text style={styles.inputLabel}>Correo Electronico</Text>
             <View style={styles.inputContainer}>
               <MaterialCommunityIcons
                 name="email-outline"
@@ -179,7 +238,7 @@ const LoginScreen: React.FC = () => {
               />
             </View>
 
-            <Text style={styles.inputLabel}>Contraseña</Text>
+            <Text style={styles.inputLabel}>Contrasena</Text>
             <View style={styles.inputContainer}>
               <MaterialCommunityIcons
                 name="lock-outline"
@@ -189,7 +248,7 @@ const LoginScreen: React.FC = () => {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Introduce tu contraseña"
+                placeholder="Introduce tu contrasena"
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
@@ -197,7 +256,7 @@ const LoginScreen: React.FC = () => {
             </View>
 
             <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotPasswordLink}>
-              <Text style={styles.linkText}>¿Olvidaste tu contraseña?</Text>
+              <Text style={styles.linkText}>Olvidaste tu contrasena?</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -206,13 +265,13 @@ const LoginScreen: React.FC = () => {
               onPress={handleLogin}
               disabled={isLoading}
             >
-              {isLoading ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Iniciar Sesión</Text>}
+              {isLoading ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Iniciar Sesion</Text>}
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity onPress={handleGoToRegister} style={styles.registerLink}>
             <Text style={styles.registerText}>
-              ¿No tienes cuenta? <Text style={styles.linkTextBold}>Regístrate</Text>
+              No tienes cuenta? <Text style={styles.linkTextBold}>Registrate</Text>
             </Text>
           </TouchableOpacity>
 
@@ -275,5 +334,4 @@ const styles = StyleSheet.create({
   registerText: { fontSize: 14, color: COLORS.textSecondary },
   linkTextBold: { color: COLORS.link, fontSize: 14, fontWeight: 'bold' },
 });
-
 

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -17,9 +17,10 @@ import {
 import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './navigation/types';
+import { apiUrl } from './config/backend';
 
 // Nota: si usas Expo, comenta los imports de abajo y usa:
 // import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -36,6 +37,8 @@ const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
 
 const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
+const AUTH_TOKEN_KEY = 'authToken';
+const LEGACY_TOKEN_KEY = 'token';
 
 const parseUser = (raw: string | null): User | null => {
   if (!raw) return null;
@@ -45,6 +48,18 @@ const parseUser = (raw: string | null): User | null => {
   } catch {
     return null;
   }
+};
+
+const normalizeString = (value: unknown) =>
+  String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const sanitizeFotoUrl = (value: unknown) => {
+  const clean = normalizeString(value);
+  if (!clean) return '';
+  if (clean.toLowerCase().startsWith('blob:')) return '';
+  return clean;
 };
 
 /* ===================== TIPOS ===================== */
@@ -225,38 +240,95 @@ const DashboardPacienteScreen: React.FC = () => {
   const [chatReply, setChatReply] = useState('');
   const chatAnim = useRef(new Animated.Value(0)).current;
 
-  // Cargar usuario real desde storage (guardado al loguearse)
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // 1) Compatibilidad con login web actual
-        if (Platform.OS === 'web') {
-          const localStorageUser = parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY));
-          if (localStorageUser) {
-            setUser(localStorageUser);
-            return;
+  // Cargar y sincronizar usuario paciente desde storage + backend.
+  const loadUser = useCallback(async () => {
+    setLoadingUser(true);
+    try {
+      const rawUserFromStorage =
+        Platform.OS === 'web'
+          ? localStorage.getItem(LEGACY_USER_STORAGE_KEY)
+          : await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY);
+      const rawUserFromAsync = await AsyncStorage.getItem(STORAGE_KEY);
+      let sessionUser = parseUser(rawUserFromStorage) || parseUser(rawUserFromAsync);
+
+      const rawTokenFromStorage =
+        Platform.OS === 'web'
+          ? localStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY)
+          : (await SecureStore.getItemAsync(AUTH_TOKEN_KEY)) ||
+            (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
+      const rawTokenFromAsync = await AsyncStorage.getItem(LEGACY_TOKEN_KEY);
+      const authToken = normalizeString(rawTokenFromStorage || rawTokenFromAsync);
+
+      if (authToken) {
+        try {
+          const response = await fetch(apiUrl('/api/auth/me'), {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${authToken}` },
+          });
+          const payload = await response.json().catch(() => null);
+
+          if (response.ok && payload?.success && payload?.user) {
+            const apiUser = payload.user as User;
+            const mergedUser: User = {
+              ...(sessionUser || {}),
+              ...apiUser,
+              nombres: normalizeString(
+                apiUser?.nombres || sessionUser?.nombres || sessionUser?.nombre || apiUser?.nombre
+              ),
+              apellidos: normalizeString(
+                apiUser?.apellidos || sessionUser?.apellidos || sessionUser?.apellido || apiUser?.apellido
+              ),
+              nombre: normalizeString(apiUser?.nombre || apiUser?.nombres || sessionUser?.nombre),
+              apellido: normalizeString(apiUser?.apellido || apiUser?.apellidos || sessionUser?.apellido),
+              fotoUrl: sanitizeFotoUrl(apiUser?.fotoUrl || sessionUser?.fotoUrl),
+              email: normalizeString(apiUser?.email || sessionUser?.email),
+              telefono: normalizeString((apiUser as any)?.telefono || (sessionUser as any)?.telefono),
+              cedula: normalizeString((apiUser as any)?.cedula || (sessionUser as any)?.cedula),
+              genero: normalizeString((apiUser as any)?.genero || (sessionUser as any)?.genero),
+              fechanacimiento: normalizeString(
+                (apiUser as any)?.fechanacimiento || (sessionUser as any)?.fechanacimiento
+              ),
+            };
+
+            sessionUser = mergedUser;
+            const rawNextUser = JSON.stringify(mergedUser);
+
+            try {
+              await AsyncStorage.setItem(STORAGE_KEY, rawNextUser);
+              await AsyncStorage.setItem('user', rawNextUser);
+            } catch {}
+
+            try {
+              if (Platform.OS === 'web') {
+                localStorage.setItem(LEGACY_USER_STORAGE_KEY, rawNextUser);
+                localStorage.setItem('user', rawNextUser);
+              } else {
+                await SecureStore.setItemAsync(LEGACY_USER_STORAGE_KEY, rawNextUser);
+              }
+            } catch {}
           }
+        } catch {
+          // Fallback silencioso a storage.
         }
-
-        // 2) Compatibilidad con login mobile actual
-        const secureStoreUser = parseUser(await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY));
-        if (secureStoreUser) {
-          setUser(secureStoreUser);
-          return;
-        }
-
-        // 3) Compatibilidad con almacenamiento legacy en AsyncStorage
-        const asyncUser = parseUser(await AsyncStorage.getItem(STORAGE_KEY));
-        setUser(asyncUser);
-      } catch {
-        setUser(null);
-      } finally {
-        setLoadingUser(false);
       }
-    };
 
-    loadUser();
+      setUser(sessionUser);
+    } catch {
+      setUser(null);
+    } finally {
+      setLoadingUser(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadUser();
+  }, [loadUser]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUser();
+    }, [loadUser])
+  );
 
   const fullName = useMemo(() => {
     const nombres = (user?.nombres || user?.nombre || user?.firstName || '').trim();
@@ -272,8 +344,9 @@ const DashboardPacienteScreen: React.FC = () => {
 
   // Foto: si no hay fotoUrl, usar avatar default
   const userAvatarSource: ImageSourcePropType = useMemo(() => {
-    if (user?.fotoUrl && user.fotoUrl.trim().length > 0) {
-      return { uri: user.fotoUrl.trim() };
+    const fotoUrl = sanitizeFotoUrl(user?.fotoUrl);
+    if (fotoUrl) {
+      return { uri: fotoUrl };
     }
     return DefaultAvatar;
   }, [user]);
@@ -1449,5 +1522,6 @@ const styles = StyleSheet.create({
 });
 
 export default DashboardPacienteScreen;
+
 
 

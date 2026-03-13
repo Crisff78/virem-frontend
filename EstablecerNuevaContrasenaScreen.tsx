@@ -22,7 +22,7 @@ type NavigationProps = NativeStackNavigationProp<
 >;
 type RouteProps = RouteProp<RootStackParamList, 'EstablecerNuevaContrasena'>;
 
-const ViremLogo = require('./assets/imagenes/Virem.png');
+const ViremLogo = require('./assets/imagenes/descarga.png');
 const { width } = Dimensions.get('window');
 
 const colors = {
@@ -64,22 +64,22 @@ const EstablecerNuevaContrasenaScreen: React.FC = () => {
 
   const rules = useMemo(
     () => [
-      { key: 'min8', label: 'Mínimo 8 caracteres' },
-      { key: 'uppercase', label: 'Una mayúscula (A-Z)' },
-      { key: 'number', label: 'Un número (0-9)' },
-      { key: 'special', label: 'Un símbolo (!@#...)' },
+      { key: 'min8', label: 'Minimo 8 caracteres' },
+      { key: 'uppercase', label: 'Una mayuscula (A-Z)' },
+      { key: 'number', label: 'Un numero (0-9)' },
+      { key: 'special', label: 'Un simbolo (!@#...)' },
     ],
     []
   );
 
   const handlePasswordReset = async () => {
     if (!email) {
-      Alert.alert('Error', 'No se encontró el correo para actualizar la contraseña.');
+      Alert.alert('Error', 'No se encontro el correo para actualizar la contrasena.');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'Las contraseñas no coinciden.');
+      Alert.alert('Error', 'Las contrasenas no coinciden.');
       return;
     }
 
@@ -89,15 +89,15 @@ const EstablecerNuevaContrasenaScreen: React.FC = () => {
       !checkRule('number') ||
       !checkRule('special')
     ) {
-      Alert.alert('Seguridad', 'La contraseña no cumple con los requisitos.');
+      Alert.alert('Seguridad', 'La contrasena no cumple con los requisitos.');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      // PETICIÓN PARA ACTUALIZAR LA CLAVE EN POSTGRES
-      const response = await fetch(apiUrl('/actualizar-password'), {
+      // Peticion para actualizar la clave en Postgres
+      const response = await fetch(apiUrl('/api/auth/recovery/reset-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -106,16 +106,16 @@ const EstablecerNuevaContrasenaScreen: React.FC = () => {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
-      if (response.ok && data.success) {
-        Alert.alert('¡Éxito!', 'Contraseña actualizada. Ya puedes iniciar sesión.');
+      if (response.ok && data?.success) {
+        Alert.alert('Exito', 'Contrasena actualizada. Ya puedes iniciar sesion.');
         navigation.navigate('Login');
       } else {
-        Alert.alert('Error', data.message || 'No se pudo actualizar.');
+        Alert.alert('Error', data?.message || 'No se pudo actualizar.');
       }
     } catch (error) {
-      Alert.alert('Error', 'No hay conexión con el servidor.');
+      Alert.alert('Error', 'No hay conexion con el servidor.');
     } finally {
       setIsLoading(false);
     }
@@ -132,9 +132,9 @@ const EstablecerNuevaContrasenaScreen: React.FC = () => {
         </View>
 
         <View style={styles.header}>
-          <Text style={styles.title}>Establecer nueva contraseña</Text>
+          <Text style={styles.title}>Establecer nueva contrasena</Text>
           <Text style={styles.subtitle}>
-            Crea una contraseña segura para tu cuenta.
+            Crea una contrasena segura para tu cuenta.
           </Text>
           {!!email && (
             <Text style={[styles.subtitle, { marginTop: 6 }]} numberOfLines={1}>
@@ -144,13 +144,13 @@ const EstablecerNuevaContrasenaScreen: React.FC = () => {
         </View>
 
         <View style={styles.formSection}>
-          {/* Nueva contraseña */}
+          {/* Nueva contrasena */}
           <View style={styles.labelContainer}>
-            <Text style={styles.labelText}>Nueva contraseña</Text>
+            <Text style={styles.labelText}>Nueva contrasena</Text>
             <View style={styles.inputGroup}>
               <TextInput
                 style={styles.input}
-                placeholder="Escribe tu nueva contraseña"
+                placeholder="Escribe tu nueva contrasena"
                 placeholderTextColor={colors.placeholder}
                 secureTextEntry={!isPasswordVisible}
                 value={newPassword}
@@ -171,13 +171,13 @@ const EstablecerNuevaContrasenaScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Confirmar contraseña */}
+          {/* Confirmar contrasena */}
           <View style={styles.labelContainer}>
-            <Text style={styles.labelText}>Confirmar contraseña</Text>
+            <Text style={styles.labelText}>Confirmar contrasena</Text>
             <View style={styles.inputGroup}>
               <TextInput
                 style={styles.input}
-                placeholder="Confirma tu contraseña"
+                placeholder="Confirma tu contrasena"
                 placeholderTextColor={colors.placeholder}
                 secureTextEntry={!isConfirmPasswordVisible}
                 value={confirmPassword}
@@ -215,7 +215,7 @@ const EstablecerNuevaContrasenaScreen: React.FC = () => {
             })}
           </View>
 
-          {/* Botón actualizar */}
+          {/* Boton actualizar */}
           <TouchableOpacity
             style={styles.updateButton}
             onPress={handlePasswordReset}
@@ -225,7 +225,7 @@ const EstablecerNuevaContrasenaScreen: React.FC = () => {
             {isLoading ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.buttonText}>Actualizar contraseña</Text>
+              <Text style={styles.buttonText}>Actualizar contrasena</Text>
             )}
           </TouchableOpacity>
 
@@ -260,9 +260,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   logoImage: {
-    width: 32,
-    height: 32,
-    tintColor: colors.primary,
+    width: 40,
+    height: 40,
     resizeMode: 'contain',
   },
   logoText: { fontSize: 24, fontWeight: 'bold', color: colors.textPrimary },

@@ -41,7 +41,7 @@ const VerificarIdentidadScreen: React.FC = () => {
     const navigation = useNavigation<NavigationProps>();
     const [isLoading, setIsLoading] = useState(false);
     
-    const recipient = route.params?.email || 'tu correo electrónico'; 
+    const recipient = route.params?.email || 'tu correo electronico'; 
     const OTP_LENGTH = 6;
     const [otp, setOtp] = useState<string[]>(new Array(OTP_LENGTH).fill(''));
     const inputRefs = useRef<Array<React.RefObject<TextInput | null>>>([]);
@@ -51,13 +51,39 @@ const VerificarIdentidadScreen: React.FC = () => {
     }
 
     const handleOtpChange = (text: string, index: number) => {
+        const onlyDigits = String(text || '').replace(/\D/g, '');
         const newOtp = [...otp];
-        newOtp[index] = text.slice(-1); 
+
+        if (!onlyDigits) {
+            newOtp[index] = '';
+            setOtp(newOtp);
+            return;
+        }
+
+        if (onlyDigits.length > 1) {
+            let cursor = index;
+            for (const digit of onlyDigits) {
+                if (cursor >= OTP_LENGTH) break;
+                newOtp[cursor] = digit;
+                cursor += 1;
+            }
+            setOtp(newOtp);
+
+            if (cursor < OTP_LENGTH) {
+                inputRefs.current[cursor].current?.focus();
+            } else {
+                Keyboard.dismiss();
+            }
+            return;
+        }
+
+        newOtp[index] = onlyDigits;
         setOtp(newOtp);
-        if (text.length >= 1 && index < OTP_LENGTH - 1) {
+        if (index < OTP_LENGTH - 1) {
             inputRefs.current[index + 1].current?.focus();
-        } 
-        if (newOtp.join('').length === OTP_LENGTH) { Keyboard.dismiss(); }
+        } else {
+            Keyboard.dismiss();
+        }
     };
     
     const handleKeyPress = (e: any, index: number) => {
@@ -69,25 +95,26 @@ const VerificarIdentidadScreen: React.FC = () => {
     const handleVerifyCode = async () => {
         const code = otp.join('');
         if (code.length !== OTP_LENGTH) {
-            Alert.alert('Incompleto', 'Ingresa el código completo.');
+            Alert.alert('Incompleto', 'Ingresa el codigo completo.');
             return;
         }
 
         setIsLoading(true);
         try {
-            const response = await fetch(apiUrl('/validar-codigo'), {
+            const response = await fetch(apiUrl('/api/auth/recovery/verify-code'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: recipient, codigo: code }),
             });
+            const data = await response.json().catch(() => null);
 
-            if (response.ok) {
+            if (response.ok && data?.success) {
                 navigation.navigate('EstablecerNuevaContrasena', { email: recipient }); 
             } else {
-                Alert.alert("Error", "Código incorrecto o expirado.");
+                Alert.alert("Error", data?.message || "Codigo incorrecto o expirado.");
             }
         } catch (error) {
-            Alert.alert("Error", "Sin conexión al servidor.");
+            Alert.alert("Error", "Sin conexion al servidor.");
         } finally {
             setIsLoading(false);
         }
@@ -98,17 +125,17 @@ const VerificarIdentidadScreen: React.FC = () => {
             <View style={styles.cardContainer}>
                 <View style={styles.iconWrapper}><MaterialCommunityIcons name="shield-lock" size={40} style={styles.icon} /></View>
                 <Text style={styles.title}>Verifica tu Identidad</Text>
-                <Text style={styles.subtitle}>Introduce el código enviado a {recipient}.</Text>
+                <Text style={styles.subtitle}>Introduce el codigo enviado a {recipient}.</Text>
                 <View style={styles.otpContainer}>
                     {otp.map((digit, index) => (
                         <TextInput key={index} ref={inputRefs.current[index]} style={styles.otpInput} value={digit} onChangeText={(text) => handleOtpChange(text, index)} onKeyPress={(e) => handleKeyPress(e, index)} keyboardType="numeric" maxLength={1} autoFocus={index === 0} />
                     ))}
                 </View>
                 <TouchableOpacity style={styles.verifyButton} onPress={handleVerifyCode} disabled={isLoading}>
-                    {isLoading ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Verificar Código</Text>}
+                    {isLoading ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Verificar Codigo</Text>}
                 </TouchableOpacity>
                 <View style={styles.resendTextWrapper}>
-                    <Text style={styles.resendText}>¿No recibiste el código? <TouchableOpacity><Text style={styles.resendLink}>Reenviar</Text></TouchableOpacity></Text>
+                    <Text style={styles.resendText}>No recibiste el codigo? <TouchableOpacity><Text style={styles.resendLink}>Reenviar</Text></TouchableOpacity></Text>
                 </View>
             </View>
         </View>

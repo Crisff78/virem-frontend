@@ -1,7 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import {
   Alert,
   ScrollView,
@@ -16,12 +17,13 @@ import {
 } from 'react-native';
 import { RootStackParamList, DatosPersonalesMedico } from './navigation/types';
 import { BACKEND_URL, apiUrl } from './config/backend';
-import { isStrongPassword, isValidEmail } from './utils/validation';
+import { isStrongPassword, isValidEmail, passwordChecks } from './utils/validation';
 
 type NavigationProps = NativeStackNavigationProp<RootStackParamList, 'RegistroCredencialesMedico'>;
 type RegistroMedicoRouteProp = RouteProp<RootStackParamList, 'RegistroCredencialesMedico'>;
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
+const MEDICO_CACHE_BY_EMAIL_KEY = 'medicoProfileByEmail';
 
 const colors = {
   primary: '#137fec',
@@ -29,7 +31,16 @@ const colors = {
   navyDark: '#0A1931',
   blueGray: '#4A7FA7',
   slate50: '#f8fafc',
+  success: '#16a34a',
+  muted: '#94a3b8',
 };
+
+const PASSWORD_RULES = [
+  { key: 'minLength', label: 'Minimo 8 caracteres' },
+  { key: 'hasUppercase', label: 'Al menos 1 mayuscula (A-Z)' },
+  { key: 'hasNumber', label: 'Al menos 1 numero (0-9)' },
+  { key: 'hasSpecial', label: 'Al menos 1 simbolo (!@#...)' },
+] as const;
 
 function esDatosMedico(x: any): x is DatosPersonalesMedico {
   return (
@@ -52,6 +63,66 @@ function showAlert(title: string, message: string) {
   }
 }
 
+const cacheMedicoProfile = async (
+  email: string,
+  nombreCompleto: string,
+  especialidad: string,
+  fotoUrl?: string,
+  cedula?: string,
+  telefono?: string,
+  genero?: string,
+  fechanacimiento?: string
+) => {
+  const key = String(email || '').trim().toLowerCase();
+  if (!key) return;
+
+  try {
+    const raw =
+      Platform.OS === 'web'
+        ? localStorage.getItem(MEDICO_CACHE_BY_EMAIL_KEY)
+        : await SecureStore.getItemAsync(MEDICO_CACHE_BY_EMAIL_KEY);
+
+    let map: Record<
+      string,
+      {
+        nombreCompleto: string;
+        especialidad: string;
+        fotoUrl?: string;
+        cedula?: string;
+        telefono?: string;
+        genero?: string;
+        fechanacimiento?: string;
+      }
+    > = {};
+    if (raw) {
+      try {
+        map = JSON.parse(raw);
+      } catch {
+        map = {};
+      }
+    }
+
+    map[key] = {
+      nombreCompleto: String(nombreCompleto || '').trim(),
+      especialidad: String(especialidad || '').trim(),
+      fotoUrl: String(fotoUrl || '').trim() || undefined,
+      cedula: String(cedula || '').trim() || undefined,
+      telefono: String(telefono || '').trim() || undefined,
+      genero: String(genero || '').trim() || undefined,
+      fechanacimiento: String(fechanacimiento || '').trim() || undefined,
+    };
+
+    const next = JSON.stringify(map);
+    if (Platform.OS === 'web') {
+      localStorage.setItem(MEDICO_CACHE_BY_EMAIL_KEY, next);
+    } else {
+      await SecureStore.setItemAsync(MEDICO_CACHE_BY_EMAIL_KEY, next);
+    }
+  } catch {
+    // Non-blocking cache failure
+  }
+};
+
 const RegistroCredencialesMedicoScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProps>();
   const route = useRoute<RegistroMedicoRouteProp>();
@@ -61,6 +132,7 @@ const RegistroCredencialesMedicoScreen: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const passwordRuleState = useMemo(() => passwordChecks(password), [password]);
 
   const handleFinish = async () => {
     if (!route.params?.datosPersonales) {
@@ -108,6 +180,8 @@ const RegistroCredencialesMedicoScreen: React.FC = () => {
         especialidad: String(dm.especialidad || '').trim(),
         cedula: String(dm.cedula || '').replace(/\D/g, '').slice(0, 11),
         telefono: String(dm.telefono || '').replace(/\D/g, '').slice(0, 15),
+        fotoUrl: String(dm.fotoUrl || '').trim(),
+        exequaturValidationToken: String(dm.exequaturValidationToken || '').trim(),
         email: emailTrim,
         password: String(password),
       };
@@ -125,6 +199,17 @@ const RegistroCredencialesMedicoScreen: React.FC = () => {
         showAlert('Error', (res?.message || `Fallo (HTTP ${response.status}).`) + detalle);
         return;
       }
+
+      await cacheMedicoProfile(
+        emailTrim,
+        bodyCompleto.nombreCompleto,
+        bodyCompleto.especialidad,
+        bodyCompleto.fotoUrl,
+        bodyCompleto.cedula,
+        bodyCompleto.telefono,
+        bodyCompleto.genero,
+        bodyCompleto.fechanacimiento
+      );
 
       showAlert('Exito', 'Cuenta de medico creada correctamente. Ahora inicia sesion.');
       navigation.replace('Login');
@@ -199,6 +284,22 @@ const RegistroCredencialesMedicoScreen: React.FC = () => {
               </View>
             </View>
 
+            <View style={styles.passwordRulesBox}>
+              {PASSWORD_RULES.map((rule) => {
+                const ok = Boolean(passwordRuleState[rule.key]);
+                return (
+                  <View key={rule.key} style={styles.passwordRuleItem}>
+                    <MaterialIcons
+                      name={ok ? 'check-circle' : 'radio-button-unchecked'}
+                      size={16}
+                      color={ok ? colors.success : colors.muted}
+                    />
+                    <Text style={[styles.passwordRuleText, ok && styles.passwordRuleTextOk]}>{rule.label}</Text>
+                  </View>
+                );
+              })}
+            </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Confirmar Contrasena</Text>
               <View style={styles.inputContainer}>
@@ -271,6 +372,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.slate50,
   },
   textInput: { flex: 1, fontSize: 16, color: colors.navyDark },
+  passwordRulesBox: {
+    backgroundColor: colors.slate50,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: -6,
+    marginBottom: 16,
+  },
+  passwordRuleItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  passwordRuleText: { marginLeft: 8, fontSize: 12, color: colors.blueGray },
+  passwordRuleTextOk: { color: colors.success, fontWeight: '600' },
 
   btnPrimary: {
     backgroundColor: colors.primary,

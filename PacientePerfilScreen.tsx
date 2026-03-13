@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,18 +16,21 @@ import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import * as ImagePicker from 'expo-image-picker';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import { useLanguage } from './localization/LanguageContext';
 import type { RootStackParamList } from './navigation/types';
+import { apiUrl } from './config/backend';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
 
 const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
+const AUTH_TOKEN_KEY = 'authToken';
+const LEGACY_TOKEN_KEY = 'token';
 
 const colors = {
   primary: '#137fec',
@@ -65,6 +68,9 @@ type User = {
   contactoEmergenciaNombre?: string;
   contactoEmergenciaTelefono?: string;
   contactoEmergenciaParentesco?: string;
+  recibirEmail?: boolean;
+  recibirSMS?: boolean;
+  compartirHistorial?: boolean;
 };
 
 type ProfileForm = {
@@ -94,6 +100,57 @@ const parseUser = (raw: string | null): User | null => {
     return JSON.parse(raw);
   } catch {
     return null;
+  }
+};
+
+const normalizeValue = (value: unknown) =>
+  String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const sanitizeFotoUrl = (value: unknown) => {
+  const clean = normalizeValue(value);
+  if (!clean) return '';
+  if (clean.toLowerCase().startsWith('blob:')) return '';
+  return clean;
+};
+
+const buildPersistentPhotoUri = (asset: ImagePicker.ImagePickerAsset | undefined): string => {
+  if (!asset) return '';
+
+  const base64 = normalizeValue((asset as any)?.base64);
+  if (base64) {
+    const mimeRaw = normalizeValue((asset as any)?.mimeType).toLowerCase();
+    const mimeType = mimeRaw.startsWith('image/') ? mimeRaw : 'image/jpeg';
+    return `data:${mimeType};base64,${base64}`;
+  }
+
+  return normalizeValue(asset.uri);
+};
+
+const toWebDataUrl = async (uri: string): Promise<string> => {
+  if (Platform.OS !== 'web') return uri;
+  const cleanUri = normalizeValue(uri);
+  if (!cleanUri || cleanUri.startsWith('data:image/')) return cleanUri;
+
+  try {
+    const response = await fetch(cleanUri);
+    const blob = await response.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string' && reader.result.startsWith('data:image/')) {
+          resolve(reader.result);
+          return;
+        }
+        resolve(cleanUri);
+      };
+      reader.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+      reader.readAsDataURL(blob);
+    });
+    return normalizeValue(dataUrl);
+  } catch {
+    return cleanUri;
   }
 };
 
@@ -156,34 +213,121 @@ const PacientePerfilScreen: React.FC = () => {
     compartirHistorial: false,
   });
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        if (Platform.OS === 'web') {
-          const localStorageUser = parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY));
-          if (localStorageUser) {
-            setUser(localStorageUser);
-            return;
-          }
-        }
-
-        const secureStoreUser = parseUser(await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY));
-        if (secureStoreUser) {
-          setUser(secureStoreUser);
-          return;
-        }
-
-        const asyncUser = parseUser(await AsyncStorage.getItem(STORAGE_KEY));
-        setUser(asyncUser);
-      } catch {
-        setUser(null);
-      } finally {
-        setLoadingUser(false);
-      }
-    };
-
-    loadUser();
+  const getAuthToken = useCallback(async () => {
+    const storageToken =
+      Platform.OS === 'web'
+        ? localStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY)
+        : (await SecureStore.getItemAsync(AUTH_TOKEN_KEY)) ||
+          (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
+    const asyncToken =
+      (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) ||
+      (await AsyncStorage.getItem(LEGACY_TOKEN_KEY));
+    return normalizeValue(storageToken || asyncToken);
   }, []);
+
+  const loadUser = useCallback(async () => {
+    setLoadingUser(true);
+    try {
+      const rawUserFromStorage =
+        Platform.OS === 'web'
+          ? localStorage.getItem(LEGACY_USER_STORAGE_KEY)
+          : await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY);
+      const rawUserFromAsync = await AsyncStorage.getItem(STORAGE_KEY);
+      const storageUser = parseUser(rawUserFromStorage) || parseUser(rawUserFromAsync);
+      const token = await getAuthToken();
+
+      let nextUser = storageUser;
+      if (token) {
+        try {
+          const response = await fetch(apiUrl('/api/users/me/paciente-profile'), {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          const payload = await response.json().catch(() => null);
+          if (response.ok && payload?.success && payload?.profile) {
+            const profile = payload.profile;
+            nextUser = {
+              ...(storageUser || {}),
+              email: normalizeValue(profile.email || storageUser?.email),
+              nombres: normalizeValue(profile.nombres || storageUser?.nombres),
+              apellidos: normalizeValue(profile.apellidos || storageUser?.apellidos),
+              nombre: normalizeValue(profile.nombres || storageUser?.nombre),
+              apellido: normalizeValue(profile.apellidos || storageUser?.apellido),
+              fechanacimiento: normalizeValue(profile.fechanacimiento || storageUser?.fechanacimiento),
+              genero: normalizeValue(profile.genero || storageUser?.genero),
+              cedula: normalizeValue(profile.cedula || storageUser?.cedula),
+              telefono: normalizeValue(profile.telefono || storageUser?.telefono),
+              direccion: normalizeValue(profile.direccion || storageUser?.direccion),
+              tipoSangre: normalizeValue(profile.tipoSangre || storageUser?.tipoSangre),
+              alergias: normalizeValue(profile.alergias || storageUser?.alergias),
+              medicamentos: normalizeValue(profile.medicamentos || storageUser?.medicamentos),
+              antecedentes: normalizeValue(profile.antecedentes || storageUser?.antecedentes),
+              contactoEmergenciaNombre: normalizeValue(
+                profile.contactoEmergenciaNombre || storageUser?.contactoEmergenciaNombre
+              ),
+              contactoEmergenciaTelefono: normalizeValue(
+                profile.contactoEmergenciaTelefono || storageUser?.contactoEmergenciaTelefono
+              ),
+              contactoEmergenciaParentesco: normalizeValue(
+                profile.contactoEmergenciaParentesco || storageUser?.contactoEmergenciaParentesco
+              ),
+              fotoUrl: sanitizeFotoUrl(profile.fotoUrl || storageUser?.fotoUrl),
+              recibirEmail: Boolean(
+                Object.prototype.hasOwnProperty.call(profile, 'recibirEmail')
+                  ? profile.recibirEmail
+                  : storageUser?.recibirEmail ?? true
+              ),
+              recibirSMS: Boolean(
+                Object.prototype.hasOwnProperty.call(profile, 'recibirSMS')
+                  ? profile.recibirSMS
+                  : storageUser?.recibirSMS ?? true
+              ),
+              compartirHistorial: Boolean(
+                Object.prototype.hasOwnProperty.call(profile, 'compartirHistorial')
+                  ? profile.compartirHistorial
+                  : storageUser?.compartirHistorial ?? false
+              ),
+            };
+          }
+        } catch {
+          // Fallback to local storage.
+        }
+      }
+
+      setUser(nextUser);
+      if (nextUser) {
+        const raw = JSON.stringify(nextUser);
+        try {
+          await AsyncStorage.setItem(STORAGE_KEY, raw);
+          await AsyncStorage.setItem('user', raw);
+        } catch {}
+        try {
+          if (Platform.OS === 'web') {
+            localStorage.setItem(LEGACY_USER_STORAGE_KEY, raw);
+            localStorage.setItem('user', raw);
+          } else {
+            await SecureStore.setItemAsync(LEGACY_USER_STORAGE_KEY, raw);
+          }
+        } catch {}
+      }
+    } catch {
+      setUser(null);
+    } finally {
+      setLoadingUser(false);
+    }
+  }, [getAuthToken]);
+
+  useEffect(() => {
+    loadUser();
+  }, [loadUser]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUser();
+    }, [loadUser])
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -205,6 +349,13 @@ const PacientePerfilScreen: React.FC = () => {
       emergenciaNombre: user.contactoEmergenciaNombre || '',
       emergenciaTelefono: user.contactoEmergenciaTelefono || '',
       emergenciaParentesco: user.contactoEmergenciaParentesco || '',
+      recibirEmail:
+        typeof user.recibirEmail === 'boolean' ? user.recibirEmail : prev.recibirEmail,
+      recibirSMS: typeof user.recibirSMS === 'boolean' ? user.recibirSMS : prev.recibirSMS,
+      compartirHistorial:
+        typeof user.compartirHistorial === 'boolean'
+          ? user.compartirHistorial
+          : prev.compartirHistorial,
     }));
   }, [user]);
 
@@ -219,8 +370,9 @@ const PacientePerfilScreen: React.FC = () => {
   }, [user?.plan]);
 
   const userAvatarSource: ImageSourcePropType = useMemo(() => {
-    if (user?.fotoUrl && user.fotoUrl.trim().length > 0) {
-      return { uri: user.fotoUrl.trim() };
+    const fotoUrl = sanitizeFotoUrl(user?.fotoUrl);
+    if (fotoUrl) {
+      return { uri: fotoUrl };
     }
     return DefaultAvatar;
   }, [user?.fotoUrl]);
@@ -236,8 +388,20 @@ const PacientePerfilScreen: React.FC = () => {
   }, [form.tipoSangre]);
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem(LEGACY_TOKEN_KEY);
+    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
     await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem('user');
+    if (Platform.OS === 'web') {
+      localStorage.removeItem(LEGACY_TOKEN_KEY);
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+      localStorage.removeItem('user');
+    } else {
+      await SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY);
+      await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+      await SecureStore.deleteItemAsync(LEGACY_USER_STORAGE_KEY);
+    }
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
@@ -245,6 +409,7 @@ const PacientePerfilScreen: React.FC = () => {
     const raw = JSON.stringify(nextUser);
     try {
       await AsyncStorage.setItem(STORAGE_KEY, raw);
+      await AsyncStorage.setItem('user', raw);
     } catch {}
     try {
       await SecureStore.setItemAsync(LEGACY_USER_STORAGE_KEY, raw);
@@ -252,6 +417,7 @@ const PacientePerfilScreen: React.FC = () => {
     if (Platform.OS === 'web') {
       try {
         (globalThis as any).localStorage?.setItem(LEGACY_USER_STORAGE_KEY, raw);
+        (globalThis as any).localStorage?.setItem('user', raw);
       } catch {}
     }
   };
@@ -270,14 +436,39 @@ const PacientePerfilScreen: React.FC = () => {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.85,
+        quality: 0.55,
+        base64: true,
       });
 
       if (result.canceled || !result.assets?.length) return;
-      const uri = result.assets[0].uri;
+      const baseUri = buildPersistentPhotoUri(result.assets[0]);
+      const uri = await toWebDataUrl(baseUri);
       if (!uri) return;
 
+      const token = await getAuthToken();
+      if (!token) {
+        Alert.alert('Sesion expirada', 'Inicia sesion nuevamente para actualizar tu foto.');
+        navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+        return;
+      }
+
+      const response = await fetch(apiUrl('/api/users/me/profile'), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ fotoUrl: uri }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) {
+        Alert.alert('Error', payload?.message || 'No se pudo guardar la foto en el servidor.');
+        return;
+      }
+
+      const finalUri = sanitizeFotoUrl(payload?.profile?.fotoUrl || uri);
       const nextUser: User = { ...(user || {}), fotoUrl: uri };
+      nextUser.fotoUrl = finalUri;
       setUser(nextUser);
       await persistUser(nextUser);
       Alert.alert('Foto actualizada', 'Tu foto de perfil fue actualizada.');
@@ -293,9 +484,82 @@ const PacientePerfilScreen: React.FC = () => {
     }
 
     setSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    setSaving(false);
-    Alert.alert('Perfil actualizado', 'Tus datos de paciente fueron guardados correctamente.');
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        Alert.alert('Sesion expirada', 'Inicia sesion nuevamente para guardar tus cambios.');
+        navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+        return;
+      }
+
+      const response = await fetch(apiUrl('/api/users/me/paciente-profile'), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          nombres: normalizeValue(form.nombres),
+          apellidos: normalizeValue(form.apellidos),
+          email: normalizeValue(form.email).toLowerCase(),
+          telefono: normalizeValue(form.telefono),
+          cedula: normalizeValue(form.cedula),
+          fechanacimiento: normalizeValue(form.fechaNacimiento),
+          genero: normalizeValue(form.genero),
+          direccion: normalizeValue(form.direccion),
+          tipoSangre: normalizeValue(form.tipoSangre),
+          alergias: normalizeValue(form.alergias),
+          medicamentos: normalizeValue(form.medicamentos),
+          antecedentes: normalizeValue(form.antecedentes),
+          contactoEmergenciaNombre: normalizeValue(form.emergenciaNombre),
+          contactoEmergenciaTelefono: normalizeValue(form.emergenciaTelefono),
+          contactoEmergenciaParentesco: normalizeValue(form.emergenciaParentesco),
+          recibirEmail: Boolean(form.recibirEmail),
+          recibirSMS: Boolean(form.recibirSMS),
+          compartirHistorial: Boolean(form.compartirHistorial),
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success || !payload?.profile) {
+        Alert.alert('Error', payload?.message || 'No se pudo guardar el perfil.');
+        return;
+      }
+
+      const profile = payload.profile;
+      const nextUser: User = {
+        ...(user || {}),
+        email: normalizeValue(profile.email),
+        nombres: normalizeValue(profile.nombres),
+        apellidos: normalizeValue(profile.apellidos),
+        nombre: normalizeValue(profile.nombres),
+        apellido: normalizeValue(profile.apellidos),
+        telefono: normalizeValue(profile.telefono),
+        cedula: normalizeValue(profile.cedula),
+        genero: normalizeValue(profile.genero),
+        fechanacimiento: normalizeValue(profile.fechanacimiento),
+        direccion: normalizeValue(profile.direccion),
+        tipoSangre: normalizeValue(profile.tipoSangre),
+        alergias: normalizeValue(profile.alergias),
+        medicamentos: normalizeValue(profile.medicamentos),
+        antecedentes: normalizeValue(profile.antecedentes),
+        contactoEmergenciaNombre: normalizeValue(profile.contactoEmergenciaNombre),
+        contactoEmergenciaTelefono: normalizeValue(profile.contactoEmergenciaTelefono),
+        contactoEmergenciaParentesco: normalizeValue(profile.contactoEmergenciaParentesco),
+        fotoUrl: sanitizeFotoUrl(profile.fotoUrl || user?.fotoUrl),
+        recibirEmail: Boolean(profile.recibirEmail),
+        recibirSMS: Boolean(profile.recibirSMS),
+        compartirHistorial: Boolean(profile.compartirHistorial),
+      };
+
+      setUser(nextUser);
+      await persistUser(nextUser);
+      Alert.alert('Perfil actualizado', 'Tus datos de paciente fueron guardados correctamente.');
+    } catch {
+      Alert.alert('Error de red', 'No se pudo conectar con el backend para guardar el perfil.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
