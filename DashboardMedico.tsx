@@ -23,7 +23,7 @@ import { apiUrl } from './config/backend';
 // import { MaterialIcons } from '@expo/vector-icons';
 
 // ✅ RN vector icons:
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 

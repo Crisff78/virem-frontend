@@ -2,6 +2,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import * as Linking from "expo-linking";
 import React from "react";
+import { Platform } from "react-native";
 
 import EstablecerNuevaContrasenaScreen from "./EstablecerNuevaContrasenaScreen";
 import LoginScreen from "./LoginScreen";
@@ -32,8 +33,13 @@ import { LanguageProvider } from "./localization/LanguageContext";
 import { RootStackParamList } from "./navigation/types";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const linkingPrefixes = [Linking.createURL("/")];
+if (Platform.OS === "web" && typeof window !== "undefined") {
+  linkingPrefixes.push(window.location.origin);
+}
+
 const linking = {
-  prefixes: [Linking.createURL("/")],
+  prefixes: linkingPrefixes,
   config: {
     screens: {
       SeleccionPerfil: "",
