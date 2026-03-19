@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useMemo, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import {
@@ -24,6 +25,7 @@ type RegistroMedicoRouteProp = RouteProp<RootStackParamList, 'RegistroCredencial
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const MEDICO_CACHE_BY_EMAIL_KEY = 'medicoProfileByEmail';
+const MEDICO_DRAFT_PREFIX = 'medicoRegDraft:';
 
 const colors = {
   primary: '#137fec',
@@ -123,6 +125,53 @@ const cacheMedicoProfile = async (
   }
 };
 
+const readMedicoDraft = async (draftKey?: string) => {
+  const key = String(draftKey || '').trim();
+  if (!key || !key.startsWith(MEDICO_DRAFT_PREFIX)) return null;
+
+  try {
+    let raw: string | null = null;
+
+    if (Platform.OS === 'web') {
+      raw = localStorage.getItem(key);
+    } else {
+      try {
+        raw = await SecureStore.getItemAsync(key);
+      } catch {
+        raw = null;
+      }
+    }
+
+    if (!raw) {
+      raw = await AsyncStorage.getItem(key);
+    }
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return parsed as Record<string, any>;
+  } catch {
+    return null;
+  }
+};
+
+const clearMedicoDraft = async (draftKey?: string) => {
+  const key = String(draftKey || '').trim();
+  if (!key || !key.startsWith(MEDICO_DRAFT_PREFIX)) return;
+
+  try {
+    await AsyncStorage.removeItem(key);
+  } catch {}
+
+  try {
+    if (Platform.OS === 'web') {
+      localStorage.removeItem(key);
+    } else {
+      await SecureStore.deleteItemAsync(key);
+    }
+  } catch {}
+};
+
 const RegistroCredencialesMedicoScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProps>();
   const route = useRoute<RegistroMedicoRouteProp>();
@@ -145,6 +194,8 @@ const RegistroCredencialesMedicoScreen: React.FC = () => {
       showAlert('Error', 'Este registro de credenciales esta configurado para medicos.');
       return;
     }
+
+    const draftData = await readMedicoDraft(dm.draftKey);
 
     if (!email || !password || !confirmPassword) {
       showAlert('Error', 'Complete todos los campos.');
@@ -173,15 +224,26 @@ const RegistroCredencialesMedicoScreen: React.FC = () => {
     setIsLoading(true);
 
     try {
+      const nombreCompleto = String(dm.nombreCompleto || draftData?.nombreCompleto || '').trim();
+      const fechanacimiento = String(dm.fechanacimiento || draftData?.fechanacimiento || '').trim();
+      const genero = String(dm.genero || draftData?.genero || '').trim();
+      const especialidad = String(dm.especialidad || draftData?.especialidad || '').trim();
+      const cedulaRaw = String(dm.cedula || draftData?.cedula || '').trim();
+      const telefonoRaw = String(dm.telefono || draftData?.telefono || '').trim();
+      const fotoUrl = String(dm.fotoUrl || draftData?.fotoUrl || '').trim();
+      const exequaturValidationToken = String(
+        dm.exequaturValidationToken || draftData?.exequaturValidationToken || ''
+      ).trim();
+
       const bodyCompleto = {
-        nombreCompleto: String(dm.nombreCompleto || '').trim(),
-        fechanacimiento: String(dm.fechanacimiento || '').trim(),
-        genero: String(dm.genero || '').trim(),
-        especialidad: String(dm.especialidad || '').trim(),
-        cedula: String(dm.cedula || '').replace(/\D/g, '').slice(0, 11),
-        telefono: String(dm.telefono || '').replace(/\D/g, '').slice(0, 15),
-        fotoUrl: String(dm.fotoUrl || '').trim(),
-        exequaturValidationToken: String(dm.exequaturValidationToken || '').trim(),
+        nombreCompleto,
+        fechanacimiento,
+        genero,
+        especialidad,
+        cedula: String(cedulaRaw || '').replace(/\D/g, '').slice(0, 11),
+        telefono: String(telefonoRaw || '').replace(/\D/g, '').slice(0, 15),
+        fotoUrl,
+        exequaturValidationToken,
         email: emailTrim,
         password: String(password),
       };
@@ -210,6 +272,7 @@ const RegistroCredencialesMedicoScreen: React.FC = () => {
         bodyCompleto.genero,
         bodyCompleto.fechanacimiento
       );
+      await clearMedicoDraft(dm.draftKey);
 
       showAlert('Exito', 'Cuenta de medico creada correctamente. Ahora inicia sesion.');
       navigation.replace('Login');

@@ -35,7 +35,9 @@ const resolveDefaultBackendUrl = (): string => {
   return resolveNativeDevBackendUrl() || MOBILE_FALLBACK_BACKEND_URL;
 };
 
-const envBackendUrl = process.env.EXPO_PUBLIC_BACKEND_URL?.trim();
+const runtimeProcess = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+  .process;
+const envBackendUrl = String(runtimeProcess?.env?.EXPO_PUBLIC_BACKEND_URL || '').trim();
 
 export const BACKEND_URL = envBackendUrl || resolveDefaultBackendUrl();
 
