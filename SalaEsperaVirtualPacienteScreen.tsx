@@ -11,11 +11,14 @@ import {
   Switch,
 } from 'react-native';
 import type { ImageSourcePropType } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useLanguage } from './localization/LanguageContext';
 import type { RootStackParamList } from './navigation/types';
+import { apiUrl } from './config/backend';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -23,10 +26,58 @@ const ViremLogo = require('./assets/imagenes/descarga.png');
 
 const DoctorAvatar: ImageSourcePropType = { uri: 'https://i.pravatar.cc/220?img=13' };
 const CameraPreview: ImageSourcePropType = { uri: 'https://i.pravatar.cc/420?img=50' };
+const AUTH_TOKEN_KEY = 'authToken';
+const LEGACY_TOKEN_KEY = 'token';
 
 type DeviceOption = {
   id: string;
   label: string;
+};
+
+type CitaItem = {
+  citaid?: string;
+  fechaHoraInicio?: string | null;
+  medico?: {
+    nombreCompleto?: string;
+    especialidad?: string;
+  };
+};
+
+const formatDateTime = (value: string | null | undefined) => {
+  if (!value) return 'Sin horario';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Sin horario';
+  return new Intl.DateTimeFormat('es-DO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
+
+const getAuthToken = async (): Promise<string> => {
+  try {
+    if (Platform.OS === 'web') {
+      return (
+        localStorage.getItem(AUTH_TOKEN_KEY) ||
+        localStorage.getItem(LEGACY_TOKEN_KEY) ||
+        ''
+      ).trim();
+    }
+
+    const secureToken =
+      (await SecureStore.getItemAsync(AUTH_TOKEN_KEY)) ||
+      (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
+    if (secureToken && secureToken.trim()) return secureToken.trim();
+
+    const asyncToken =
+      (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) ||
+      (await AsyncStorage.getItem(LEGACY_TOKEN_KEY));
+    return String(asyncToken || '').trim();
+  } catch {
+    return '';
+  }
 };
 
 const SalaEsperaVirtualPacienteScreen: React.FC = () => {
@@ -47,6 +98,8 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
   const [selectedCameraId, setSelectedCameraId] = useState('');
   const [selectedMicId, setSelectedMicId] = useState('');
   const [selectedSpeakerId, setSelectedSpeakerId] = useState('');
+  const [nextCita, setNextCita] = useState<CitaItem | null>(null);
+  const [loadingCita, setLoadingCita] = useState(false);
   const dot1 = useRef(new Animated.Value(0.25)).current;
   const dot2 = useRef(new Animated.Value(0.25)).current;
   const dot3 = useRef(new Animated.Value(0.25)).current;
@@ -83,6 +136,36 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
     animation.start();
     return () => animation.stop();
   }, [dot1, dot2, dot3, signalPulse]);
+
+  useEffect(() => {
+    const loadNextCita = async () => {
+      setLoadingCita(true);
+      try {
+        const token = await getAuthToken();
+        if (!token) {
+          setNextCita(null);
+          return;
+        }
+
+        const response = await fetch(apiUrl('/api/users/me/citas?scope=upcoming&limit=1'), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await response.json().catch(() => null);
+        if (response.ok && payload?.success && Array.isArray(payload?.citas) && payload.citas.length) {
+          setNextCita(payload.citas[0] as CitaItem);
+        } else {
+          setNextCita(null);
+        }
+      } catch {
+        setNextCita(null);
+      } finally {
+        setLoadingCita(false);
+      }
+    };
+
+    loadNextCita();
+  }, []);
 
   const openSettings = () => {
     setSettingsOpen(true);
@@ -201,6 +284,12 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
     }
   }, [settingsOpen]);
 
+  const doctorName =
+    String(nextCita?.medico?.nombreCompleto || '').trim() || 'Tu especialista';
+  const doctorSpec =
+    String(nextCita?.medico?.especialidad || '').trim() || 'Medicina General';
+  const citaHora = formatDateTime(nextCita?.fechaHoraInicio);
+
   return (
     <View style={styles.container}>
       <View style={styles.sidebar}>
@@ -282,13 +371,17 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
               </View>
             </View>
 
-            <Text style={styles.waitTitle}>El Dr. Alejandro García se unirá pronto a la sesión</Text>
+            <Text style={styles.waitTitle}>
+              {loadingCita
+                ? 'Cargando los datos de tu cita...'
+                : `El ${doctorName} se unira pronto a la sesion`}
+            </Text>
             <View style={styles.waitDotsRow}>
               <Animated.Text style={[styles.waitDot, { opacity: dot1 }]}>•</Animated.Text>
               <Animated.Text style={[styles.waitDot, { opacity: dot2 }]}>•</Animated.Text>
               <Animated.Text style={[styles.waitDot, { opacity: dot3 }]}>•</Animated.Text>
             </View>
-            <Text style={styles.waitSub}>En espera...</Text>
+            <Text style={styles.waitSub}>{loadingCita ? 'Sincronizando...' : 'En espera...'}</Text>
 
             <Text style={styles.waitHint}>
               Por favor, no cierres esta ventana. Se te notificará con un sonido cuando el doctor esté listo.
@@ -303,7 +396,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
                 <MaterialIcons name="medical-services" size={16} color={colors.primary} />
                 <View>
                   <Text style={styles.summaryLabel}>Doctor</Text>
-                  <Text style={styles.summaryValue}>Dr. Alejandro García</Text>
+                  <Text style={styles.summaryValue}>{doctorName}</Text>
                 </View>
               </View>
 
@@ -311,7 +404,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
                 <MaterialCommunityIcons name="heart-pulse" size={16} color={colors.primary} />
                 <View>
                   <Text style={styles.summaryLabel}>Especialidad</Text>
-                  <Text style={styles.summaryValue}>Cardiología Clínica</Text>
+                  <Text style={styles.summaryValue}>{doctorSpec}</Text>
                 </View>
               </View>
 
@@ -319,7 +412,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
                 <MaterialIcons name="schedule" size={16} color={colors.primary} />
                 <View>
                   <Text style={styles.summaryLabel}>Hora programada</Text>
-                  <Text style={styles.summaryValue}>Hoy, 16:30 PM</Text>
+                  <Text style={styles.summaryValue}>{citaHora}</Text>
                 </View>
               </View>
             </View>

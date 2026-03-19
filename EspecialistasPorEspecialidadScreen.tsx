@@ -20,6 +20,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import { useLanguage } from './localization/LanguageContext';
 import type { RootStackParamList } from './navigation/types';
+import { apiUrl } from './config/backend';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
@@ -30,6 +31,8 @@ const Doctor3: ImageSourcePropType = { uri: 'https://i.pravatar.cc/240?img=18' }
 
 const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
+const AUTH_TOKEN_KEY = 'authToken';
+const LEGACY_TOKEN_KEY = 'token';
 
 type User = {
   nombres?: string;
@@ -40,6 +43,15 @@ type User = {
   lastName?: string;
   plan?: string;
   fotoUrl?: string;
+};
+
+type BackendMedico = {
+  medicoid?: string;
+  nombreCompleto?: string;
+  especialidad?: string;
+  genero?: string;
+  cedula?: string;
+  telefono?: string;
 };
 
 type Doctor = {
@@ -65,6 +77,38 @@ const parseUser = (raw: string | null): User | null => {
     return JSON.parse(raw);
   } catch {
     return null;
+  }
+};
+
+const normalizeText = (value: unknown) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+const getAuthToken = async (): Promise<string> => {
+  try {
+    if (Platform.OS === 'web') {
+      return (
+        localStorage.getItem(AUTH_TOKEN_KEY) ||
+        localStorage.getItem(LEGACY_TOKEN_KEY) ||
+        ''
+      ).trim();
+    }
+
+    const secureToken =
+      (await SecureStore.getItemAsync(AUTH_TOKEN_KEY)) ||
+      (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
+    if (secureToken && secureToken.trim()) return secureToken.trim();
+
+    const asyncToken =
+      (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) ||
+      (await AsyncStorage.getItem(LEGACY_TOKEN_KEY));
+    return String(asyncToken || '').trim();
+  } catch {
+    return '';
   }
 };
 
@@ -294,9 +338,19 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
   const [loadingUser, setLoadingUser] = useState(true);
   const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>('today');
   const [ratingMin, setRatingMin] = useState<'4.5' | '4.0' | null>('4.5');
+  const [backendDoctors, setBackendDoctors] = useState<Doctor[]>([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
 
   const specialty = route.params?.specialty || 'Cardiologia';
-  const doctors = doctorsBySpecialty[specialty] || doctorsBySpecialty.Cardiologia;
+  const fallbackDoctors = doctorsBySpecialty[specialty] || doctorsBySpecialty.Cardiologia;
+  const doctors = useMemo(() => {
+    if (!backendDoctors.length) return fallbackDoctors;
+    const specialtyKey = normalizeText(specialty);
+    const filtered = backendDoctors.filter((doctor) =>
+      normalizeText(doctor.focus || '').includes(specialtyKey)
+    );
+    return filtered.length ? filtered : backendDoctors;
+  }, [backendDoctors, fallbackDoctors, specialty]);
   const availabilityLabel =
     availabilityFilter === 'today'
       ? 'hoy mismo'
@@ -304,8 +358,15 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
         ? 'esta semana'
         : 'fines de semana';
   const displayedDoctors = useMemo(
-    () => doctors.filter((doctor) => doctor.availability.includes(availabilityFilter)),
-    [availabilityFilter, doctors]
+    () =>
+      doctors.filter((doctor) => {
+        if (!doctor.availability.includes(availabilityFilter)) return false;
+        if (!ratingMin) return true;
+        const ratingValue = Number.parseFloat(String(doctor.rating || '').replace(',', '.'));
+        if (!Number.isFinite(ratingValue)) return true;
+        return ratingValue >= Number.parseFloat(ratingMin);
+      }),
+    [availabilityFilter, doctors, ratingMin]
   );
 
   useEffect(() => {
@@ -337,6 +398,58 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
     loadUser();
   }, []);
 
+  useEffect(() => {
+    const loadDoctors = async () => {
+      setLoadingDoctors(true);
+      try {
+        const token = await getAuthToken();
+        if (!token) {
+          setBackendDoctors([]);
+          return;
+        }
+
+        const response = await fetch(apiUrl('/api/medicos'), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await response.json().catch(() => null);
+        if (!(response.ok && payload?.success && Array.isArray(payload?.medicos))) {
+          setBackendDoctors([]);
+          return;
+        }
+
+        const mapped = payload.medicos.map((item: BackendMedico, index: number) => {
+          const name = String(item?.nombreCompleto || '').trim() || `Medico ${index + 1}`;
+          const especialidad = String(item?.especialidad || '').trim() || 'Medicina General';
+          const genero = normalizeText(item?.genero);
+          const isFemale = genero.includes('f');
+          return {
+            id: String(item?.medicoid || `med-${index + 1}`),
+            name,
+            focus: especialidad,
+            exp: item?.cedula ? `Cedula: ${String(item.cedula)}` : 'Colegiado',
+            rating: '--',
+            reviews: '--',
+            city: 'RD',
+            price: 'N/D',
+            tags: [especialidad, item?.telefono ? `Tel: ${String(item.telefono)}` : 'Consulta virtual'],
+            availability: ['today', 'week', 'weekend'],
+            image: isFemale ? Doctor2 : Doctor1,
+            availableNow: true,
+            verified: true,
+          } as Doctor;
+        });
+        setBackendDoctors(mapped);
+      } catch {
+        setBackendDoctors([]);
+      } finally {
+        setLoadingDoctors(false);
+      }
+    };
+
+    loadDoctors();
+  }, []);
+
   const fullName = useMemo(() => {
     const nombres = (user?.nombres || user?.nombre || user?.firstName || '').trim();
     const apellidos = (user?.apellidos || user?.apellido || user?.lastName || '').trim();
@@ -357,8 +470,25 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
   }, [user]);
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+    await AsyncStorage.removeItem(LEGACY_TOKEN_KEY);
     await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(LEGACY_TOKEN_KEY);
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+      } else {
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_USER_STORAGE_KEY);
+        await SecureStore.deleteItemAsync(STORAGE_KEY);
+      }
+    } catch {}
+
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
@@ -476,7 +606,9 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
 
         <Text style={styles.pageTitle}>Seleccionar especialista en {specialty}</Text>
         <Text style={styles.pageSubtitle}>
-          Encontramos {displayedDoctors.length} medicos disponibles para atenderte.
+          {loadingDoctors
+            ? 'Buscando especialistas disponibles...'
+            : `Encontramos ${displayedDoctors.length} medicos disponibles para atenderte.`}
         </Text>
 
         <View style={styles.layoutRow}>
@@ -525,7 +657,9 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
               <Text style={styles.resultsText}>
                 Mostrando resultados para <Text style={styles.resultsStrong}>{specialty}</Text>
               </Text>
-              <Text style={styles.orderText}>Ordenar por: Mas relevante</Text>
+              <Text style={styles.orderText}>
+                {backendDoctors.length ? 'Fuente: Base de datos real' : 'Fuente: Catalogo local'}
+              </Text>
             </View>
 
             {displayedDoctors.length === 0 ? (

@@ -8,5 +8,6 @@
     "skipLibCheck": true,
     "baseUrl": "."
   },
-  "include": ["**/*.ts", "**/*.tsx"]
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["ViremApp"]
 }

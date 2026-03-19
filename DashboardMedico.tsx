@@ -437,6 +437,37 @@ const DashboardMedico: React.FC = () => {
         } catch {
           // Non-blocking: fallback to cached data
         }
+
+        try {
+          const profileResponse = await fetch(apiUrl('/api/users/me/profile'), {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+            },
+          });
+          const profilePayload = await profileResponse.json().catch(() => null);
+          const serverFoto = sanitizeFotoUrl(profilePayload?.profile?.fotoUrl || '');
+          if (serverFoto) {
+            sessionUser = {
+              ...(sessionUser || {}),
+              fotoUrl: serverFoto,
+            };
+            const rawUserWithServerFoto = JSON.stringify(sessionUser);
+            try {
+              await AsyncStorage.setItem(ASYNC_USER_KEY, rawUserWithServerFoto);
+            } catch {}
+            try {
+              if (Platform.OS === 'web') {
+                localStorage.setItem(LEGACY_USER_STORAGE_KEY, rawUserWithServerFoto);
+                localStorage.setItem(ASYNC_USER_KEY, rawUserWithServerFoto);
+              } else {
+                await SecureStore.setItemAsync(LEGACY_USER_STORAGE_KEY, rawUserWithServerFoto);
+              }
+            } catch {}
+          }
+        } catch {
+          // Non-blocking: keep current cached photo.
+        }
       }
 
       if (!sessionUser) {
@@ -483,6 +514,57 @@ const DashboardMedico: React.FC = () => {
       }
 
       const cached = email ? cacheMap[email] : null;
+      const cachedFoto = sanitizeFotoUrl(cached?.fotoUrl || '');
+      const currentFoto = sanitizeFotoUrl(sessionUser.fotoUrl || sessionUser.medico?.fotoUrl || '');
+
+      if (authToken && email && !currentFoto && cachedFoto) {
+        try {
+          const syncResponse = await fetch(apiUrl('/api/users/me/profile'), {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({ fotoUrl: cachedFoto }),
+          });
+          const syncPayload = await syncResponse.json().catch(() => null);
+          if (syncResponse.ok && syncPayload?.success) {
+            const syncedFoto = sanitizeFotoUrl(syncPayload?.profile?.fotoUrl || cachedFoto);
+            sessionUser = {
+              ...sessionUser,
+              fotoUrl: syncedFoto,
+            };
+
+            const rawSyncedUser = JSON.stringify(sessionUser);
+            try {
+              await AsyncStorage.setItem(ASYNC_USER_KEY, rawSyncedUser);
+            } catch {}
+            try {
+              if (Platform.OS === 'web') {
+                localStorage.setItem(LEGACY_USER_STORAGE_KEY, rawSyncedUser);
+                localStorage.setItem(ASYNC_USER_KEY, rawSyncedUser);
+              } else {
+                await SecureStore.setItemAsync(LEGACY_USER_STORAGE_KEY, rawSyncedUser);
+              }
+            } catch {}
+
+            cacheMap[email] = {
+              ...cacheMap[email],
+              fotoUrl: syncedFoto,
+            };
+            const rawSyncedCache = JSON.stringify(cacheMap);
+            try {
+              if (Platform.OS === 'web') {
+                localStorage.setItem(MEDICO_CACHE_BY_EMAIL_KEY, rawSyncedCache);
+              } else {
+                await SecureStore.setItemAsync(MEDICO_CACHE_BY_EMAIL_KEY, rawSyncedCache);
+              }
+            } catch {}
+          }
+        } catch {
+          // Non-blocking: keep local cached photo and retry on next load.
+        }
+      }
 
       const nombreBase = String(
         sessionUser.nombreCompleto || sessionUser.medico?.nombreCompleto || cached?.nombreCompleto || ''

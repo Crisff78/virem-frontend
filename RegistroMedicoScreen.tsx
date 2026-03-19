@@ -1,6 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useMemo, useState } from "react";
 import { Pressable } from "react-native";
 import {
@@ -20,6 +21,7 @@ import {
 
 import * as ImagePicker from "expo-image-picker";
 import * as FaceDetector from "expo-face-detector";
+import * as SecureStore from "expo-secure-store";
 
 import { RootStackParamList } from "./navigation/types";
 import { apiUrl } from "./config/backend";
@@ -35,6 +37,7 @@ interface CountryCodeType {
 
 const ViremLogo = require("./assets/imagenes/descarga.png");
 const { width } = Dimensions.get("window");
+const MEDICO_DRAFT_PREFIX = "medicoRegDraft:";
 
 // Prefijos + mÃÂ¡scara
 const countryCodes: CountryCodeType[] = [
@@ -200,6 +203,25 @@ const toWebDataUrl = async (uri: string): Promise<string> => {
     return String(dataUrl || "").trim();
   } catch {
     return cleanUri;
+  }
+};
+
+const persistMedicoDraft = async (draftKey: string, payload: Record<string, any>) => {
+  const key = String(draftKey || "").trim();
+  if (!key) return;
+
+  const raw = JSON.stringify(payload || {});
+  await AsyncStorage.setItem(key, raw);
+
+  if (Platform.OS === "web") {
+    localStorage.setItem(key, raw);
+    return;
+  }
+
+  try {
+    await SecureStore.setItemAsync(key, raw);
+  } catch {
+    // Non-blocking on mobile secure storage
   }
 };
 // =========================================
@@ -783,16 +805,30 @@ const RegistroMedicoScreen: React.FC = () => {
     const exequaturValidationToken =
       typeof exq.meta?.validationToken === "string" ? exq.meta.validationToken : undefined;
 
+    const draftPayload = {
+      nombreCompleto: nombreCompletoTrim,
+      fechanacimiento: birthDate,
+      genero: gender,
+      especialidad,
+      cedula,
+      telefono: `${selectedCountryCode.code} ${phone}`,
+      fotoUrl: String(fotoUri || "").trim() || undefined,
+      exequaturValidationToken,
+    };
+
+    let draftKey: string | undefined;
+    try {
+      draftKey = `${MEDICO_DRAFT_PREFIX}${Date.now()}`;
+      await persistMedicoDraft(draftKey, draftPayload);
+    } catch {
+      draftKey = undefined;
+    }
+
     navigation.navigate("RegistroCredencialesMedico", {
       datosPersonales: {
-        nombreCompleto: nombreCompletoTrim,
-        fechanacimiento: birthDate,
-        genero: gender,
-        especialidad,
-        cedula,
-        telefono: `${selectedCountryCode.code} ${phone}`,
-        fotoUrl: String(fotoUri || "").trim() || undefined,
-        exequaturValidationToken,
+        ...draftPayload,
+        fotoUrl: draftKey ? undefined : draftPayload.fotoUrl,
+        draftKey,
       },
     });
   };

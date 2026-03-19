@@ -16,6 +16,7 @@ export type DatosPersonalesMedico = {
   telefono: string;
   fotoUrl?: string;
   exequaturValidationToken?: string;
+  draftKey?: string;
 };
 
 export type RootStackParamList = {

@@ -350,6 +350,60 @@ const MedicoPerfilScreen: React.FC = () => {
             }
           }
         } catch {}
+
+        try {
+          const profileResponse = await fetch(apiUrl('/api/users/me/profile'), {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+            },
+          });
+          const profilePayload = await profileResponse.json().catch(() => null);
+          const serverFoto = sanitizeFotoUrl(profilePayload?.profile?.fotoUrl || '');
+          if (serverFoto) {
+            sessionUser = {
+              ...(sessionUser || {}),
+              fotoUrl: serverFoto,
+            };
+
+            const rawNextUser = JSON.stringify(sessionUser);
+            try {
+              await AsyncStorage.setItem(ASYNC_USER_KEY, rawNextUser);
+            } catch {}
+
+            try {
+              if (Platform.OS === 'web') {
+                localStorage.setItem(LEGACY_USER_STORAGE_KEY, rawNextUser);
+              } else {
+                await SecureStore.setItemAsync(LEGACY_USER_STORAGE_KEY, rawNextUser);
+              }
+            } catch {}
+          }
+        } catch {}
+      }
+
+      const currentFoto = sanitizeFotoUrl(sessionUser?.fotoUrl || sessionUser?.medico?.fotoUrl);
+      const cachedFoto = sanitizeFotoUrl(cached?.fotoUrl);
+      if (authToken && email && !currentFoto && cachedFoto) {
+        try {
+          const syncResponse = await fetch(apiUrl('/api/users/me/profile'), {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({ fotoUrl: cachedFoto }),
+          });
+          const syncPayload = await syncResponse.json().catch(() => null);
+          if (syncResponse.ok && syncPayload?.success) {
+            const syncedFoto = sanitizeFotoUrl(syncPayload?.profile?.fotoUrl || cachedFoto);
+            sessionUser = { ...(sessionUser || {}), fotoUrl: syncedFoto };
+            cacheMap[email] = {
+              ...(cacheMap[email] || {}),
+              fotoUrl: syncedFoto,
+            };
+          }
+        } catch {}
       }
 
       setRawUser(sessionUser);
@@ -382,29 +436,24 @@ const MedicoPerfilScreen: React.FC = () => {
     async (uri: string) => {
       const cleanUri = normalizeValue(uri);
       const token = await getAuthToken();
-      let savedOnServer = false;
-      let finalUri = sanitizeFotoUrl(cleanUri);
-
-      if (token) {
-        try {
-          const response = await fetch(apiUrl('/api/users/me/profile'), {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ fotoUrl: cleanUri }),
-          });
-          const payload = await response.json().catch(() => null);
-          if (response.ok && payload?.success) {
-            savedOnServer = true;
-            finalUri = sanitizeFotoUrl(payload?.profile?.fotoUrl || cleanUri);
-          }
-        } catch {
-          // Non-blocking: keep local save as fallback
-        }
+      if (!token) {
+        throw new Error('Inicia sesion nuevamente para guardar tu foto.');
       }
 
+      const response = await fetch(apiUrl('/api/users/me/profile'), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ fotoUrl: cleanUri }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.message || 'No se pudo guardar la foto en el servidor.');
+      }
+
+      const finalUri = sanitizeFotoUrl(payload?.profile?.fotoUrl || cleanUri);
       const email = normalizeValue(rawUser?.email).toLowerCase();
       const nextUser: SessionUser = {
         ...(rawUser || {}),
@@ -455,7 +504,7 @@ const MedicoPerfilScreen: React.FC = () => {
 
       setRawUser(nextUser);
       setProfile((prev) => ({ ...prev, fotoUrl: finalUri }));
-      return { savedOnServer };
+      return { savedOnServer: true };
     },
     [getAuthToken, profile, rawUser]
   );
@@ -484,17 +533,10 @@ const MedicoPerfilScreen: React.FC = () => {
       if (!uri) return;
 
       setSavingPhoto(true);
-      const resultSave = await persistProfilePhoto(uri);
-      if (resultSave?.savedOnServer) {
-        Alert.alert('Foto actualizada', 'La foto del perfil medico se guardo en el servidor.');
-      } else {
-        Alert.alert(
-          'Foto actualizada',
-          'La foto se guardo localmente. Revisa la conexion al backend para sincronizarla en todos los dispositivos.'
-        );
-      }
-    } catch {
-      Alert.alert('Error', 'No se pudo actualizar la foto del perfil.');
+      await persistProfilePhoto(uri);
+      Alert.alert('Foto actualizada', 'La foto del perfil medico se guardo correctamente.');
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'No se pudo actualizar la foto del perfil.');
     } finally {
       setSavingPhoto(false);
     }

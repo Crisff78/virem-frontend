@@ -62,6 +62,56 @@ const sanitizeFotoUrl = (value: unknown) => {
   return clean;
 };
 
+const getAuthToken = async (): Promise<string> => {
+  try {
+    if (Platform.OS === 'web') {
+      return (
+        localStorage.getItem(AUTH_TOKEN_KEY) ||
+        localStorage.getItem(LEGACY_TOKEN_KEY) ||
+        ''
+      ).trim();
+    }
+
+    const secureToken =
+      (await SecureStore.getItemAsync(AUTH_TOKEN_KEY)) ||
+      (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
+    if (secureToken && secureToken.trim()) return secureToken.trim();
+
+    const asyncToken =
+      (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) ||
+      (await AsyncStorage.getItem(LEGACY_TOKEN_KEY));
+    return String(asyncToken || '').trim();
+  } catch {
+    return '';
+  }
+};
+
+const formatDateTime = (value: string | null) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('es-DO', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
+
+const formatRelativeIn = (value: string | null) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const diffMs = date.getTime() - Date.now();
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin <= 0) return 'Inicia pronto';
+  if (diffMin < 60) return `en ${diffMin} min`;
+  const diffHour = Math.round(diffMin / 60);
+  if (diffHour < 24) return `en ${diffHour} h`;
+  const diffDay = Math.round(diffHour / 24);
+  return `en ${diffDay} dia(s)`;
+};
+
 /* ===================== TIPOS ===================== */
 type User = {
   id?: number | string;
@@ -74,6 +124,25 @@ type User = {
   email?: string;
   plan?: string;        // "Premium" / "Básico"
   fotoUrl?: string;     // URL de la foto si la subió
+  telefono?: string;
+  cedula?: string;
+  genero?: string;
+  fechanacimiento?: string;
+};
+
+type CitaItem = {
+  citaid: string;
+  fechaHoraInicio: string | null;
+  fechaHoraFin: string | null;
+  duracionMin: number;
+  nota: string;
+  precio: number | null;
+  estado: string;
+  medico?: {
+    medicoid?: string;
+    nombreCompleto?: string;
+    especialidad?: string;
+  };
 };
 
 type QuickActionProps = {
@@ -231,6 +300,9 @@ const DashboardPacienteScreen: React.FC = () => {
       unread: false,
     },
   ]);
+  const [upcomingCitas, setUpcomingCitas] = useState<CitaItem[]>([]);
+  const [historyCitas, setHistoryCitas] = useState<CitaItem[]>([]);
+  const [loadingCitas, setLoadingCitas] = useState(false);
   const [prepOpen, setPrepOpen] = useState(false);
   const [prepItems, setPrepItems] = useState([false, false, false, false]);
   const [testProgress, setTestProgress] = useState(0);
@@ -310,6 +382,52 @@ const DashboardPacienteScreen: React.FC = () => {
         } catch {
           // Fallback silencioso a storage.
         }
+
+        setLoadingCitas(true);
+        try {
+          const [upcomingResponse, historyResponse] = await Promise.all([
+            fetch(apiUrl('/api/users/me/citas?scope=upcoming&limit=10'), {
+              method: 'GET',
+              headers: { Authorization: `Bearer ${authToken}` },
+            }),
+            fetch(apiUrl('/api/users/me/citas?scope=history&limit=10'), {
+              method: 'GET',
+              headers: { Authorization: `Bearer ${authToken}` },
+            }),
+          ]);
+
+          const upcomingPayload = await upcomingResponse.json().catch(() => null);
+          const historyPayload = await historyResponse.json().catch(() => null);
+
+          if (
+            upcomingResponse.ok &&
+            upcomingPayload?.success &&
+            Array.isArray(upcomingPayload?.citas)
+          ) {
+            setUpcomingCitas(upcomingPayload.citas as CitaItem[]);
+          } else {
+            setUpcomingCitas([]);
+          }
+
+          if (
+            historyResponse.ok &&
+            historyPayload?.success &&
+            Array.isArray(historyPayload?.citas)
+          ) {
+            setHistoryCitas(historyPayload.citas as CitaItem[]);
+          } else {
+            setHistoryCitas([]);
+          }
+        } catch {
+          setUpcomingCitas([]);
+          setHistoryCitas([]);
+        } finally {
+          setLoadingCitas(false);
+        }
+      } else {
+        setUpcomingCitas([]);
+        setHistoryCitas([]);
+        setLoadingCitas(false);
       }
 
       setUser(sessionUser);
@@ -354,6 +472,30 @@ const DashboardPacienteScreen: React.FC = () => {
   // Doctores placeholder (esto no depende del usuario)
   const Doctor1: ImageSourcePropType = { uri: 'https://i.pravatar.cc/150?img=12' };
   const Doctor2: ImageSourcePropType = { uri: 'https://i.pravatar.cc/150?img=32' };
+  const primaryCita = upcomingCitas.length ? upcomingCitas[0] : null;
+  const pendingCitas = useMemo(() => {
+    if (!upcomingCitas.length) return [];
+    return upcomingCitas.slice(primaryCita ? 1 : 0, (primaryCita ? 1 : 0) + 2);
+  }, [upcomingCitas, primaryCita]);
+  const historyRows = useMemo(() => historyCitas.slice(0, 2), [historyCitas]);
+  const frequentDoctors = useMemo(() => {
+    const order: { name: string; spec: string }[] = [];
+    const seen = new Set<string>();
+    for (const cita of [...upcomingCitas, ...historyCitas]) {
+      const name = normalizeString(cita?.medico?.nombreCompleto || '');
+      const spec = normalizeString(cita?.medico?.especialidad || 'Medicina General');
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      order.push({ name, spec: spec || 'Medicina General' });
+      if (order.length >= 2) break;
+    }
+    return order;
+  }, [upcomingCitas, historyCitas]);
+
+  const primaryDoctorName = normalizeString(primaryCita?.medico?.nombreCompleto || '');
+  const primaryDoctorSpec = normalizeString(primaryCita?.medico?.especialidad || 'Medicina General');
+  const primaryDateLabel = formatDateTime(primaryCita?.fechaHoraInicio || null);
+  const primaryRelative = formatRelativeIn(primaryCita?.fechaHoraInicio || null);
 
   const toggleChat = () => {
     const next = !chatOpen;
@@ -368,16 +510,34 @@ const DashboardPacienteScreen: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+    await AsyncStorage.removeItem(LEGACY_TOKEN_KEY);
     await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(LEGACY_TOKEN_KEY);
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+      } else {
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_USER_STORAGE_KEY);
+        await SecureStore.deleteItemAsync(STORAGE_KEY);
+      }
+    } catch {}
+
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
   const handleJoinVideoCall = () => {
-    Alert.alert(
-      'Videollamada',
-      'Conectándote a la videollamada con el Dr. Alejandro García...'
-    );
+    if (!primaryCita) {
+      Alert.alert('Videollamada', 'No tienes citas activas para entrar ahora.');
+      return;
+    }
+    navigation.navigate('SalaEsperaVirtualPaciente');
   };
 
   const handleSeePreparations = () => {
@@ -572,7 +732,11 @@ const DashboardPacienteScreen: React.FC = () => {
 
         <Text style={styles.title}>Hola, {fullName.split(' ')[0] || 'Paciente'}</Text>
         <Text style={styles.subtitle}>
-          Hoy tienes una cita programada con el equipo de cardiología.
+          {loadingCitas
+            ? 'Cargando tus citas...'
+            : primaryCita
+              ? `Tu proxima cita es con ${primaryDoctorName || 'tu especialista'}.`
+              : 'Aun no tienes citas programadas. Agenda tu primera consulta.'}
         </Text>
 
         {/* Card grande */}
@@ -584,21 +748,35 @@ const DashboardPacienteScreen: React.FC = () => {
             </View>
 
             <Text style={styles.bigCardTitle}>
-              Próxima Videoconsulta: Dr. Alejandro García
+              {primaryCita
+                ? `Proxima videoconsulta: ${primaryDoctorName || 'Especialista'}`
+                : 'No tienes videoconsultas pendientes'}
             </Text>
 
             <Text style={styles.bigCardSub}>
-              Cardiología · Hoy, 16:30 PM (en 15 minutos)
+              {primaryCita
+                ? `${primaryDoctorSpec || 'Medicina General'} · ${primaryDateLabel} (${primaryRelative})`
+                : 'Selecciona "Nueva consulta" para agendar una cita.'}
             </Text>
 
             <View style={styles.bigCardActions}>
-              <TouchableOpacity style={styles.primaryBtn} onPress={handleJoinVideoCall}>
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={primaryCita ? handleJoinVideoCall : () => navigation.navigate('NuevaConsultaPaciente')}
+              >
                 <MaterialIcons name="videocam" size={18} color="#fff" />
-                <Text style={styles.primaryBtnText}>Entrar a Videollamada</Text>
+                <Text style={styles.primaryBtnText}>
+                  {primaryCita ? 'Entrar a Videollamada' : 'Ir a Nueva Consulta'}
+                </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.secondaryBtn} onPress={handleSeePreparations}>
-                <Text style={styles.secondaryBtnText}>Ver preparativos</Text>
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={primaryCita ? handleSeePreparations : () => navigation.navigate('NuevaConsultaPaciente')}
+              >
+                <Text style={styles.secondaryBtnText}>
+                  {primaryCita ? 'Ver preparativos' : 'Agendar ahora'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -622,6 +800,7 @@ const DashboardPacienteScreen: React.FC = () => {
             label="Agendar cita"
             color="#f97316"
             bg="#fff7ed"
+            onPress={() => navigation.navigate('NuevaConsultaPaciente')}
           />
           <QuickAction icon="chat" label="Consultar Chat" color="#14b8a6" bg="#f0fdfa" />
           <QuickAction
@@ -642,17 +821,25 @@ const DashboardPacienteScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <AppointmentCard
-              doctor="Dra. Marta Sánchez"
-              detail="Dermatología · 24 Oct, 10:00 AM"
-              avatar={Doctor2}
-            />
-            <AppointmentCard
-              doctor="Dr. Ricardo Ruiz"
-              detail="Medicina General · 28 Oct, 09:15 AM"
-              avatar={Doctor1}
-              simple
-            />
+            {pendingCitas.length ? (
+              pendingCitas.map((cita, index) => (
+                <AppointmentCard
+                  key={cita.citaid || `${cita.fechaHoraInicio}-${index}`}
+                  doctor={normalizeString(cita?.medico?.nombreCompleto || 'Especialista')}
+                  detail={`${normalizeString(cita?.medico?.especialidad || 'Medicina General')} · ${formatDateTime(cita.fechaHoraInicio)}`}
+                  avatar={index % 2 === 0 ? Doctor2 : Doctor1}
+                  simple={index % 2 !== 0}
+                />
+              ))
+            ) : (
+              <View style={styles.emptyStateCard}>
+                <Text style={styles.emptyStateText}>
+                  {loadingCitas
+                    ? 'Cargando citas pendientes...'
+                    : 'No tienes citas pendientes. Agenda una nueva consulta.'}
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.colRight} />
@@ -660,26 +847,44 @@ const DashboardPacienteScreen: React.FC = () => {
 
         <View style={styles.twoCols}>
           <View style={styles.colLeft}>
-            <Text style={styles.sectionTitle}>Recetas y Documentos</Text>
+            <Text style={styles.sectionTitle}>Historial reciente de consultas</Text>
             <View style={styles.listCard}>
-              <DocRow
-                icon="picture-as-pdf"
-                title="Receta_Medica_Oct2023.pdf"
-                sub="Dra. Marta Sánchez · 24 Oct 2023"
-              />
-              <DocRow
-                icon="analytics"
-                title="Analisis_Sangre_Sept.pdf"
-                sub="Laboratorio Central · 15 Sep 2023"
-              />
+              {historyRows.length ? (
+                historyRows.map((cita, index) => (
+                  <DocRow
+                    key={cita.citaid || `${cita.fechaHoraInicio}-${index}`}
+                    icon={index % 2 === 0 ? 'history' : 'description'}
+                    title={`${normalizeString(cita?.medico?.especialidad || 'Consulta')} · ${normalizeString(cita.estado || 'Completada')}`}
+                    sub={`${normalizeString(cita?.medico?.nombreCompleto || 'Especialista')} · ${formatDateTime(cita.fechaHoraInicio)}`}
+                  />
+                ))
+              ) : (
+                <View style={styles.emptyStateCard}>
+                  <Text style={styles.emptyStateText}>
+                    {loadingCitas ? 'Cargando historial...' : 'Aun no hay consultas registradas.'}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 
           <View style={styles.colRight}>
             <Text style={styles.sectionTitle}>Doctores frecuentes</Text>
             <View style={styles.doctorsGrid}>
-              <DoctorCard name="Dr. Alejandro García" spec="Cardiología" avatar={Doctor1} />
-              <DoctorCard name="Dr. Ricardo Ruiz" spec="Med. General" avatar={Doctor2} />
+              {frequentDoctors.length ? (
+                frequentDoctors.map((item, index) => (
+                  <DoctorCard
+                    key={`${item.name}-${index}`}
+                    name={item.name}
+                    spec={item.spec}
+                    avatar={index % 2 === 0 ? Doctor1 : Doctor2}
+                  />
+                ))
+              ) : (
+                <View style={styles.emptyStateCard}>
+                  <Text style={styles.emptyStateText}>Aun no hay doctores frecuentes.</Text>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -689,21 +894,28 @@ const DashboardPacienteScreen: React.FC = () => {
             <View style={styles.summaryIconBox}>
               <MaterialCommunityIcons name="history" size={18} color="#fff" />
             </View>
-            <Text style={styles.summaryTitle}>Resumen de última consulta</Text>
+            <Text style={styles.summaryTitle}>Resumen de ultima consulta</Text>
           </View>
 
           <View style={styles.summaryInner}>
             <View style={styles.rowBetween}>
               <View>
                 <Text style={styles.summaryLabel}>Diagnóstico Principal</Text>
-                <Text style={styles.summaryDiag}>Gripe común estacional</Text>
+                <Text style={styles.summaryDiag}>
+                  {historyCitas[0]
+                    ? normalizeString(historyCitas[0].nota || historyCitas[0].estado || 'Consulta completada')
+                    : 'Sin historial disponible'}
+                </Text>
               </View>
-              <Text style={styles.summaryDate}>12 Oct 2023</Text>
+              <Text style={styles.summaryDate}>
+                {historyCitas[0] ? formatDateTime(historyCitas[0].fechaHoraInicio) : '--'}
+              </Text>
             </View>
 
             <Text style={styles.summaryText}>
-              Paciente presenta síntomas de resfriado leve. Se recomienda descanso, hidratación constante
-              y el uso de analgésicos según receta adjunta. Revisión en 5 días si los síntomas persisten.
+              {historyCitas[0]
+                ? `Ultimo estado registrado: ${normalizeString(historyCitas[0].estado || 'Completada')}.`
+                : 'Cuando completes una consulta, aqui veras un resumen clinico.'}
             </Text>
           </View>
         </View>
@@ -842,7 +1054,11 @@ const DashboardPacienteScreen: React.FC = () => {
             </View>
 
             <Text style={styles.prepTitle}>Prepárate para tu videollamada</Text>
-            <Text style={styles.prepSub}>Con el Dr. Alejandro García • Cardiología</Text>
+            <Text style={styles.prepSub}>
+              {primaryCita
+                ? `Con ${primaryDoctorName || 'tu especialista'} • ${primaryDoctorSpec || 'Medicina General'}`
+                : 'Con tu especialista asignado'}
+            </Text>
 
             <View style={styles.prepGrid}>
               <View style={styles.prepCard}>
@@ -1317,6 +1533,15 @@ const styles = StyleSheet.create({
   notificationsButtonText: { color: '#fff', fontSize: 14, fontWeight: '900' },
 
   listCard: { backgroundColor: '#fff', borderRadius: 22, overflow: 'hidden', marginTop: 10, shadowColor: colors.dark, shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  emptyStateCard: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  emptyStateText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   docRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   docLeft: { flexDirection: 'row', gap: 12, alignItems: 'center', flex: 1 },
   docIconBox: { width: 44, height: 44, borderRadius: 16, backgroundColor: 'rgba(19,127,236,0.12)', alignItems: 'center', justifyContent: 'center' },

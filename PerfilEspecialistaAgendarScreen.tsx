@@ -62,6 +62,15 @@ type DoctorProfile = {
   services: string[];
 };
 
+type BackendMedico = {
+  medicoid?: string;
+  nombreCompleto?: string;
+  especialidad?: string;
+  genero?: string;
+  cedula?: string;
+  telefono?: string;
+};
+
 const parseUser = (raw: string | null): User | null => {
   if (!raw) return null;
   try {
@@ -69,6 +78,46 @@ const parseUser = (raw: string | null): User | null => {
   } catch {
     return null;
   }
+};
+
+const normalizeText = (value: unknown) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+const mapBackendMedicoToProfile = (
+  medico: BackendMedico,
+  fallbackSpecialty: string
+): DoctorProfile => {
+  const specialty = String(medico?.especialidad || fallbackSpecialty || 'Medicina General').trim() || 'Medicina General';
+  const name = String(medico?.nombreCompleto || '').trim() || 'Doctor';
+  const genero = normalizeText(medico?.genero);
+  const image = genero.includes('f') ? Doctor2 : Doctor1;
+  const cedula = String(medico?.cedula || '').trim();
+  const telefono = String(medico?.telefono || '').trim();
+
+  return {
+    id: String(medico?.medicoid || ''),
+    specialty,
+    name,
+    focus: specialty,
+    years: 'No disponible',
+    rating: 'N/D',
+    reviews: 'N/D',
+    languages: 'Español',
+    license: cedula || 'No disponible',
+    price: 'N/D',
+    image,
+    about: `Especialista en ${specialty}. Puedes agendar una consulta virtual para evaluacion y seguimiento clinico.`,
+    services: [
+      `Consulta de ${specialty}`,
+      'Orientacion clinica y plan de manejo',
+      telefono ? `Contacto: ${telefono}` : 'Seguimiento por plataforma',
+    ],
+  };
 };
 
 const isSameCalendarDay = (a: Date, b: Date) =>
@@ -167,15 +216,18 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
   const [selectedTime, setSelectedTime] = useState('');
   const [creatingCita, setCreatingCita] = useState(false);
+  const [backendDoctor, setBackendDoctor] = useState<DoctorProfile | null>(null);
+  const [loadingDoctor, setLoadingDoctor] = useState(false);
 
   const specialty = route.params?.specialty || 'Cardiologia';
-  const doctor = useMemo(() => {
+  const fallbackDoctor = useMemo(() => {
     return (
       doctorProfiles.find((profile) => profile.id === route.params?.doctorId) ||
       doctorProfiles.find((profile) => profile.specialty === specialty) ||
       doctorProfiles[0]
     );
   }, [route.params?.doctorId, specialty]);
+  const doctor = backendDoctor || fallbackDoctor;
 
   const availableDays = useMemo(() => {
     const now = new Date();
@@ -261,6 +313,59 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
     loadUser();
   }, []);
 
+  useEffect(() => {
+    const loadDoctorFromBackend = async () => {
+      const doctorId = String(route.params?.doctorId || '').trim();
+      if (!doctorId) {
+        setBackendDoctor(null);
+        return;
+      }
+
+      const token = await getAuthToken();
+      if (!token) {
+        setBackendDoctor(null);
+        return;
+      }
+
+      setLoadingDoctor(true);
+      try {
+        const response = await fetch(apiUrl(`/api/medicos/${doctorId}`), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await response.json().catch(() => null);
+
+        if (response.ok && payload?.success && payload?.medico) {
+          setBackendDoctor(mapBackendMedicoToProfile(payload.medico as BackendMedico, specialty));
+          return;
+        }
+
+        const fallbackResponse = await fetch(apiUrl('/api/medicos'), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const fallbackPayload = await fallbackResponse.json().catch(() => null);
+        if (fallbackResponse.ok && fallbackPayload?.success && Array.isArray(fallbackPayload?.medicos)) {
+          const match = fallbackPayload.medicos.find(
+            (item: any) => String(item?.medicoid || '').trim() === doctorId
+          );
+          if (match) {
+            setBackendDoctor(mapBackendMedicoToProfile(match as BackendMedico, specialty));
+            return;
+          }
+        }
+
+        setBackendDoctor(null);
+      } catch {
+        setBackendDoctor(null);
+      } finally {
+        setLoadingDoctor(false);
+      }
+    };
+
+    loadDoctorFromBackend();
+  }, [route.params?.doctorId, specialty]);
+
   const fullName = useMemo(() => {
     const nombres = (user?.nombres || user?.nombre || user?.firstName || '').trim();
     const apellidos = (user?.apellidos || user?.apellido || user?.lastName || '').trim();
@@ -281,8 +386,25 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
   }, [user]);
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+    await AsyncStorage.removeItem(LEGACY_TOKEN_KEY);
     await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(LEGACY_TOKEN_KEY);
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+      } else {
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_USER_STORAGE_KEY);
+        await SecureStore.deleteItemAsync(STORAGE_KEY);
+      }
+    } catch {}
+
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
@@ -312,20 +434,26 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
 
     setCreatingCita(true);
     try {
+      const parsedPrice = Number.parseFloat(String(doctor.price || '').replace(/[^\d.]/g, ''));
+      const body: any = {
+        fechaHoraInicio: appointmentDate.toISOString(),
+        duracionMin: 30,
+        nota: `Solicitud desde portal paciente - ${doctor.focus}`,
+        especialidad: specialty,
+        nombreMedico: doctor.name,
+        medicoId: doctor.id,
+      };
+      if (Number.isFinite(parsedPrice) && parsedPrice >= 0) {
+        body.precio = parsedPrice;
+      }
+
       const response = await fetch(apiUrl('/api/users/me/citas'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          fechaHoraInicio: appointmentDate.toISOString(),
-          duracionMin: 30,
-          nota: `Solicitud desde portal paciente - ${doctor.focus}`,
-          especialidad: specialty,
-          nombreMedico: doctor.name,
-          precio: Number.parseFloat(String(doctor.price || '')),
-        }),
+        body: JSON.stringify(body),
       });
 
       const raw = await response.text();
@@ -364,11 +492,13 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
     }
   };
 
-  if (loadingUser) {
+  if (loadingUser || loadingDoctor) {
     return (
       <View style={styles.loaderWrap}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loaderText}>Cargando informacion...</Text>
+        <Text style={styles.loaderText}>
+          {loadingDoctor ? 'Cargando especialista...' : 'Cargando informacion...'}
+        </Text>
       </View>
     );
   }
@@ -547,7 +677,9 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
               <View style={styles.bookingCard}>
                 <View style={styles.bookingTop}>
                   <Text style={styles.priceLabel}>Precio de consulta</Text>
-                  <Text style={styles.priceValue}>${doctor.price}</Text>
+                  <Text style={styles.priceValue}>
+                    {doctor.price === 'N/D' ? 'N/D' : `$${doctor.price}`}
+                  </Text>
                 </View>
                 <View style={styles.bookingBody}>
                   <Text style={styles.sectionTitle}>Selecciona fecha de cita</Text>
