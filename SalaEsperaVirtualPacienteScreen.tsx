@@ -20,17 +20,14 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useLanguage } from './localization/LanguageContext';
 import type { RootStackParamList } from './navigation/types';
-import { apiUrl } from './config/backend';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { ensurePatientSessionUser, getPatientDisplayName } from './utils/patientSession';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
-const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
 
-const DoctorAvatar: ImageSourcePropType = DefaultAvatar;
-const STORAGE_KEY = 'user';
-const LEGACY_USER_STORAGE_KEY = 'userProfile';
+const DoctorAvatar: ImageSourcePropType = { uri: 'https://i.pravatar.cc/220?img=13' };
+const CameraPreview: ImageSourcePropType = { uri: 'https://i.pravatar.cc/420?img=50' };
 const AUTH_TOKEN_KEY = 'authToken';
 const LEGACY_TOKEN_KEY = 'token';
 
@@ -56,32 +53,7 @@ type CitaItem = {
   medico?: {
     nombreCompleto?: string;
     especialidad?: string;
-    fotoUrl?: string | null;
   };
-};
-
-const parseUser = (raw: string | null): User | null => {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-};
-
-const sanitizeFotoUrl = (value: unknown) => {
-  const clean = String(value || '').trim();
-  if (!clean) return '';
-  if (clean.toLowerCase().startsWith('blob:')) return '';
-  return clean;
-};
-
-const resolveAvatarSource = (value: unknown): ImageSourcePropType => {
-  const clean = sanitizeFotoUrl(value);
-  if (clean) {
-    return { uri: clean };
-  }
-  return DefaultAvatar;
 };
 
 const formatDateTime = (value: string | null | undefined) => {
@@ -103,27 +75,12 @@ const parseDateMs = (value: string | null | undefined) => {
   return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
 };
 
-const getAuthToken = async (): Promise<string> => {
+const parseUser = (raw: string | null): User | null => {
+  if (!raw) return null;
   try {
-    if (Platform.OS === 'web') {
-      return (
-        localStorage.getItem(AUTH_TOKEN_KEY) ||
-        localStorage.getItem(LEGACY_TOKEN_KEY) ||
-        ''
-      ).trim();
-    }
-
-    const secureToken =
-      (await SecureStore.getItemAsync(AUTH_TOKEN_KEY)) ||
-      (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
-    if (secureToken && secureToken.trim()) return secureToken.trim();
-
-    const asyncToken =
-      (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) ||
-      (await AsyncStorage.getItem(LEGACY_TOKEN_KEY));
-    return String(asyncToken || '').trim();
+    return JSON.parse(raw);
   } catch {
-    return '';
+    return null;
   }
 };
 
@@ -131,7 +88,6 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
 
   const { t, tx } = useLanguage();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const route = useRoute<RouteProp<RootStackParamList, 'SalaEsperaVirtualPaciente'>>();
   const [cameraOn, setCameraOn] = useState(true);
   const [micOn, setMicOn] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -146,10 +102,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
   const [selectedCameraId, setSelectedCameraId] = useState('');
   const [selectedMicId, setSelectedMicId] = useState('');
   const [selectedSpeakerId, setSelectedSpeakerId] = useState('');
-  const [user, setUser] = useState<User | null>(null);
   const [nextCita, setNextCita] = useState<CitaItem | null>(null);
-  const [upcomingCitas, setUpcomingCitas] = useState<CitaItem[]>([]);
-  const [selectedCitaId, setSelectedCitaId] = useState('');
   const [loadingCita, setLoadingCita] = useState(false);
   const dot1 = useRef(new Animated.Value(0.25)).current;
   const dot2 = useRef(new Animated.Value(0.25)).current;
@@ -289,37 +242,21 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
       try {
         const token = await getAuthToken();
         if (!token) {
-          setUpcomingCitas([]);
-          setSelectedCitaId('');
           setNextCita(null);
           return;
         }
 
-        const response = await fetch(apiUrl('/api/users/me/citas?scope=upcoming&limit=30'), {
+        const response = await fetch(apiUrl('/api/users/me/citas?scope=upcoming&limit=1'), {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` },
         });
         const payload = await response.json().catch(() => null);
         if (response.ok && payload?.success && Array.isArray(payload?.citas) && payload.citas.length) {
-          const ordered = [...(payload.citas as CitaItem[])].sort(
-            (a, b) => parseDateMs(a?.fechaHoraInicio) - parseDateMs(b?.fechaHoraInicio)
-          );
-          setUpcomingCitas(ordered);
-
-          const fromParam = requestedCitaId
-            ? ordered.find((item) => String(item?.citaid || '').trim() === requestedCitaId)
-            : null;
-          const chosen = fromParam || ordered[0] || null;
-          setSelectedCitaId(String(chosen?.citaid || ''));
-          setNextCita(chosen);
+          setNextCita(payload.citas[0] as CitaItem);
         } else {
-          setUpcomingCitas([]);
-          setSelectedCitaId('');
           setNextCita(null);
         }
       } catch {
-        setUpcomingCitas([]);
-        setSelectedCitaId('');
         setNextCita(null);
       } finally {
         setLoadingCita(false);
@@ -327,22 +264,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
     };
 
     loadNextCita();
-  }, [requestedCitaId]);
-
-  useEffect(() => {
-    if (!upcomingCitas.length) {
-      setNextCita(null);
-      return;
-    }
-    const selected =
-      upcomingCitas.find((item) => String(item?.citaid || '').trim() === selectedCitaId) ||
-      upcomingCitas[0];
-    setNextCita(selected || null);
-    const selectedId = String(selected?.citaid || '').trim();
-    if (selectedId && selectedId !== selectedCitaId) {
-      setSelectedCitaId(selectedId);
-    }
-  }, [selectedCitaId, upcomingCitas]);
+  }, []);
 
   const openSettings = () => {
     setSettingsOpen(true);
@@ -466,42 +388,6 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
   const doctorSpec =
     String(nextCita?.medico?.especialidad || '').trim() || 'Medicina General';
   const citaHora = formatDateTime(nextCita?.fechaHoraInicio);
-  const fullName = useMemo(() => getPatientDisplayName(user, 'Paciente'), [user]);
-  const planLabel = useMemo(() => {
-    const plan = String(user?.plan || '').trim();
-    return plan ? `Paciente ${plan}` : 'Paciente';
-  }, [user]);
-  const userAvatarSource: ImageSourcePropType = useMemo(() => {
-    return resolveAvatarSource(user?.fotoUrl);
-  }, [user]);
-  const doctorAvatarSource: ImageSourcePropType = useMemo(() => {
-    const foto = sanitizeFotoUrl(nextCita?.medico?.fotoUrl);
-    if (foto) return { uri: foto };
-    return DoctorAvatar;
-  }, [nextCita?.medico?.fotoUrl]);
-
-  const handleLogout = async () => {
-    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
-    await AsyncStorage.removeItem(LEGACY_TOKEN_KEY);
-    await AsyncStorage.removeItem(STORAGE_KEY);
-    await AsyncStorage.removeItem(LEGACY_USER_STORAGE_KEY);
-
-    try {
-      if (Platform.OS === 'web') {
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-        localStorage.removeItem(LEGACY_TOKEN_KEY);
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(LEGACY_USER_STORAGE_KEY);
-      } else {
-        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
-        await SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY);
-        await SecureStore.deleteItemAsync(LEGACY_USER_STORAGE_KEY);
-        await SecureStore.deleteItemAsync(STORAGE_KEY);
-      }
-    } catch {}
-
-    navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
-  };
 
   return (
     <View style={styles.container}>
@@ -513,12 +399,6 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
               <Text style={styles.logoTitle}>VIREM</Text>
               <Text style={styles.logoSubtitle}>Portal Paciente</Text>
             </View>
-          </View>
-
-          <View style={styles.userBox}>
-            <Image source={userAvatarSource} style={styles.userAvatar} />
-            <Text style={styles.userName}>{fullName}</Text>
-            <Text style={styles.userPlan}>{planLabel}</Text>
           </View>
 
           <View style={styles.menu}>
@@ -535,10 +415,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
               <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => navigation.navigate('PacienteCitas')}
-            >
+            <TouchableOpacity style={styles.menuItem}>
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
@@ -548,7 +425,18 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
               onPress={() => navigation.navigate('SalaEsperaVirtualPaciente')}
             >
               <MaterialIcons name="videocam" size={20} color={colors.primary} />
-              <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.videocall')}</Text>
+              <Text style={[styles.menuText, styles.menuTextActive]}>
+                {tx({ es: 'Videollamada activa', en: 'Active Video Call', pt: 'Videochamada ativa' })}
+              </Text>
+              <View style={styles.menuLiveDot} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('PacienteChat')}
+            >
+              <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.chat')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -660,18 +548,14 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
             <Text style={styles.waitTitle}>
               {loadingCita
                 ? 'Cargando los datos de tu cita...'
-                : nextCita
-                  ? `El ${doctorName} se unira pronto a la sesion`
-                  : 'No tienes citas proximas para videollamada'}
+                : `El ${doctorName} se unira pronto a la sesion`}
             </Text>
             <View style={styles.waitDotsRow}>
               <Animated.Text style={[styles.waitDot, { opacity: dot1 }]}>•</Animated.Text>
               <Animated.Text style={[styles.waitDot, { opacity: dot2 }]}>•</Animated.Text>
               <Animated.Text style={[styles.waitDot, { opacity: dot3 }]}>•</Animated.Text>
             </View>
-            <Text style={styles.waitSub}>
-              {loadingCita ? 'Sincronizando...' : nextCita ? 'En espera...' : 'Agenda una consulta para iniciar.'}
-            </Text>
+            <Text style={styles.waitSub}>{loadingCita ? 'Sincronizando...' : 'En espera...'}</Text>
 
             <Text style={styles.waitHint}>
               {nextCita
@@ -688,7 +572,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
                 <MaterialIcons name="medical-services" size={16} color={colors.primary} />
                 <View>
                   <Text style={styles.summaryLabel}>Doctor</Text>
-                  <Text style={styles.summaryValue}>{doctorName}</Text>
+                  <Text style={styles.summaryValue}>Dr. Alejandro García</Text>
                 </View>
               </View>
 
@@ -696,7 +580,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
                 <MaterialCommunityIcons name="heart-pulse" size={16} color={colors.primary} />
                 <View>
                   <Text style={styles.summaryLabel}>Especialidad</Text>
-                  <Text style={styles.summaryValue}>{doctorSpec}</Text>
+                  <Text style={styles.summaryValue}>Cardiología Clínica</Text>
                 </View>
               </View>
 
@@ -704,7 +588,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
                 <MaterialIcons name="schedule" size={16} color={colors.primary} />
                 <View>
                   <Text style={styles.summaryLabel}>Hora programada</Text>
-                  <Text style={styles.summaryValue}>{citaHora}</Text>
+                  <Text style={styles.summaryValue}>Hoy, 16:30 PM</Text>
                 </View>
               </View>
             </View>
@@ -978,34 +862,8 @@ const styles = StyleSheet.create({
   logo: { width: 44, height: 44, resizeMode: 'contain' },
   logoTitle: { fontSize: 20, fontWeight: '800', color: colors.dark, letterSpacing: 0.5 },
   logoSubtitle: { fontSize: 11, fontWeight: '700', color: colors.muted },
-  userBox: {
-    marginTop: 18,
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  userAvatar: {
-    width: 76,
-    height: 76,
-    borderRadius: 76,
-    borderWidth: 4,
-    borderColor: '#f5f7fb',
-    marginBottom: 10,
-  },
-  userName: {
-    color: colors.dark,
-    fontSize: 14,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  userPlan: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 2,
-    textAlign: 'center',
-  },
   menu: {
-    marginTop: 10,
+    marginTop: 18,
     gap: 6,
     flex: Platform.OS === 'web' ? 1 : 0,
     flexDirection: Platform.OS === 'web' ? 'column' : 'row',

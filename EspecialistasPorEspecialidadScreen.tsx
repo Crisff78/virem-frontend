@@ -585,7 +585,7 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
         await SecureStore.deleteItemAsync(LEGACY_USER_STORAGE_KEY);
         await SecureStore.deleteItemAsync(STORAGE_KEY);
       }
-    } catch {}
+    } catch { }
 
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
@@ -628,10 +628,7 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
               <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteCitas')}
-            >
+            <TouchableOpacity style={styles.menuItemRow}>
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
@@ -666,6 +663,14 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
             >
               <MaterialIcons name="account-circle" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.profile')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteConfiguracion')}
+            >
+              <MaterialIcons name="settings" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>

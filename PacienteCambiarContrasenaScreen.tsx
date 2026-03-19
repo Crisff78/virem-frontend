@@ -206,11 +206,11 @@ const PacienteCambiarContrasenaScreen: React.FC = () => {
         Alert.alert(
           tx({ es: 'Error', en: 'Error', pt: 'Erro' }),
           data?.message ||
-            tx({
-              es: 'No se pudo actualizar la contrasena.',
-              en: 'Could not update password.',
-              pt: 'Nao foi possivel atualizar a senha.',
-            })
+          tx({
+            es: 'No se pudo actualizar la contrasena.',
+            en: 'Could not update password.',
+            pt: 'Nao foi possivel atualizar a senha.',
+          })
         );
         return;
       }
@@ -288,10 +288,7 @@ const PacienteCambiarContrasenaScreen: React.FC = () => {
               <MaterialIcons name="person-search" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteCitas')}
-            >
+            <TouchableOpacity style={styles.menuItemRow}>
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
@@ -301,6 +298,10 @@ const PacienteCambiarContrasenaScreen: React.FC = () => {
             >
               <MaterialIcons name="videocam" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.videocall')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItemRow} onPress={() => navigation.navigate('PacienteChat')}>
+              <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.chat')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuItemRow} onPress={() => navigation.navigate('PacienteRecetasDocumentos')}>
               <MaterialIcons name="description" size={20} color={colors.muted} />

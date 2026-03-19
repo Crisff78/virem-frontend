@@ -135,10 +135,10 @@ const toDoctorProfile = (value: {
     Array.isArray(value.services) && value.services.length
       ? value.services
       : [
-          `Consulta de ${specialty}`,
-          'Orientacion clinica y plan de manejo',
-          'Seguimiento por plataforma',
-        ];
+        `Consulta de ${specialty}`,
+        'Orientacion clinica y plan de manejo',
+        'Seguimiento por plataforma',
+      ];
 
   return {
     id: String(value.id || '').trim(),
@@ -535,7 +535,7 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
         await SecureStore.deleteItemAsync(LEGACY_USER_STORAGE_KEY);
         await SecureStore.deleteItemAsync(STORAGE_KEY);
       }
-    } catch {}
+    } catch { }
 
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
@@ -650,12 +650,6 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
             </View>
           </View>
 
-          <View style={styles.sidebarUserBox}>
-            <Image source={userAvatarSource} style={styles.sidebarUserAvatar} />
-            <Text style={styles.sidebarUserName}>{fullName}</Text>
-            <Text style={styles.sidebarUserPlan}>{planLabel}</Text>
-          </View>
-
           <View style={styles.menu}>
             <TouchableOpacity
               style={styles.menuItemRow}
@@ -673,10 +667,7 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
               <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteCitas')}
-            >
+            <TouchableOpacity style={styles.menuItemRow}>
               <MaterialIcons name="calendar-month" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
@@ -689,20 +680,16 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
               <Text style={styles.menuText}>{t('menu.videocall')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteRecetasDocumentos')}
-            >
+            <TouchableOpacity style={styles.menuItemRow}>
               <MaterialIcons name="description" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.recipesDocs')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteChat')}
-            >
-              <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.chat')}</Text>
+            <TouchableOpacity style={styles.menuItemRow}>
+              <MaterialIcons name="folder-shared" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>
+                {tx({ es: 'Historial Clinico', en: 'Clinical History', pt: 'Historico Clinico' })}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -931,43 +918,11 @@ const styles = StyleSheet.create({
     padding: Platform.OS === 'web' ? 20 : 14,
     justifyContent: 'space-between',
   },
-  logoBox: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  logo: { width: 44, height: 44, resizeMode: 'contain' },
-  logoTitle: { fontSize: 20, fontWeight: '800', color: colors.dark, letterSpacing: 0.5 },
-  logoSubtitle: { fontSize: 11, color: colors.muted, fontWeight: '700' },
-  sidebarUserBox: {
-    marginTop: 18,
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  sidebarUserAvatar: {
-    width: 76,
-    height: 76,
-    borderRadius: 76,
-    borderWidth: 4,
-    borderColor: '#f5f7fb',
-    marginBottom: 10,
-  },
-  sidebarUserName: {
-    color: colors.dark,
-    fontWeight: '800',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  sidebarUserPlan: {
-    color: colors.muted,
-    fontWeight: '700',
-    fontSize: 11,
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  menu: {
-    marginTop: 10,
-    gap: 6,
-    flex: Platform.OS === 'web' ? 1 : 0,
-    flexDirection: Platform.OS === 'web' ? 'column' : 'row',
-    flexWrap: 'wrap',
-  },
+  logoBox: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, marginBottom: 12 },
+  logo: { width: 30, height: 30, resizeMode: 'contain' },
+  logoTitle: { fontSize: 20, fontWeight: '900', color: colors.dark, letterSpacing: 0.5 },
+  logoSubtitle: { fontSize: 10, color: colors.muted, fontWeight: '700' },
+  menu: { gap: 4, flexDirection: Platform.OS === 'web' ? 'column' : 'row', flexWrap: 'wrap' },
   menuItemRow: {
     flexDirection: 'row',
     alignItems: 'center',

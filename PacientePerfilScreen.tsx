@@ -95,6 +95,30 @@ type ProfileForm = {
   compartirHistorial: boolean;
 };
 
+const buildFormFromUser = (user: User | null, fallback?: ProfileForm): ProfileForm => ({
+  nombres: user?.nombres || user?.nombre || user?.firstName || '',
+  apellidos: user?.apellidos || user?.apellido || user?.lastName || '',
+  email: user?.email || '',
+  telefono: user?.telefono || '',
+  cedula: user?.cedula || '',
+  fechaNacimiento: user?.fechanacimiento || '',
+  genero: user?.genero || '',
+  direccion: user?.direccion || '',
+  tipoSangre: user?.tipoSangre || '',
+  alergias: user?.alergias || '',
+  medicamentos: user?.medicamentos || '',
+  antecedentes: user?.antecedentes || '',
+  emergenciaNombre: user?.contactoEmergenciaNombre || '',
+  emergenciaTelefono: user?.contactoEmergenciaTelefono || '',
+  emergenciaParentesco: user?.contactoEmergenciaParentesco || '',
+  recibirEmail: typeof user?.recibirEmail === 'boolean' ? user.recibirEmail : fallback?.recibirEmail ?? true,
+  recibirSMS: typeof user?.recibirSMS === 'boolean' ? user.recibirSMS : fallback?.recibirSMS ?? true,
+  compartirHistorial:
+    typeof user?.compartirHistorial === 'boolean'
+      ? user.compartirHistorial
+      : fallback?.compartirHistorial ?? false,
+});
+
 const parseUser = (raw: string | null): User | null => {
   if (!raw) return null;
   try {
@@ -186,40 +210,32 @@ const PacientePerfilScreen: React.FC = () => {
 
   const { t, tx } = useLanguage();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [user, setUser] = useState<User | null>(null);
+  const initialUser = useMemo(() => {
+    if (Platform.OS !== 'web') return null;
+    try {
+      return (
+        parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY)) ||
+        parseUser(localStorage.getItem(STORAGE_KEY))
+      );
+    } catch {
+      return null;
+    }
+  }, []);
+  const [user, setUser] = useState<User | null>(initialUser);
   const [loadingUser, setLoadingUser] = useState(true);
   const [saving, setSaving] = useState(false);
   const [medicalOpen, setMedicalOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [bloodTypeOpen, setBloodTypeOpen] = useState(false);
   const selectingBloodTypeRef = useRef(false);
-  const [form, setForm] = useState<ProfileForm>({
-    nombres: '',
-    apellidos: '',
-    email: '',
-    telefono: '',
-    cedula: '',
-    fechaNacimiento: '',
-    genero: '',
-    direccion: '',
-    tipoSangre: '',
-    alergias: '',
-    medicamentos: '',
-    antecedentes: '',
-    emergenciaNombre: '',
-    emergenciaTelefono: '',
-    emergenciaParentesco: '',
-    recibirEmail: true,
-    recibirSMS: true,
-    compartirHistorial: false,
-  });
+  const [form, setForm] = useState<ProfileForm>(() => buildFormFromUser(initialUser));
 
   const getAuthToken = useCallback(async () => {
     const storageToken =
       Platform.OS === 'web'
         ? localStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY)
         : (await SecureStore.getItemAsync(AUTH_TOKEN_KEY)) ||
-          (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
+        (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
     const asyncToken =
       (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) ||
       (await AsyncStorage.getItem(LEGACY_TOKEN_KEY));
@@ -234,7 +250,7 @@ const PacientePerfilScreen: React.FC = () => {
           ? localStorage.getItem(LEGACY_USER_STORAGE_KEY)
           : await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY);
       const rawUserFromAsync = await AsyncStorage.getItem(STORAGE_KEY);
-      const storageUser = ensurePatientSessionUser(parseUser(rawUserFromStorage) || parseUser(rawUserFromAsync));
+      const storageUser = parseUser(rawUserFromStorage) || parseUser(rawUserFromAsync);
       const token = await getAuthToken();
 
       let nextUser = storageUser;
@@ -299,11 +315,12 @@ const PacientePerfilScreen: React.FC = () => {
 
       setUser(nextUser);
       if (nextUser) {
+        setForm((prev) => buildFormFromUser(nextUser, prev));
         const raw = JSON.stringify(nextUser);
         try {
           await AsyncStorage.setItem(STORAGE_KEY, raw);
           await AsyncStorage.setItem('user', raw);
-        } catch {}
+        } catch { }
         try {
           if (Platform.OS === 'web') {
             localStorage.setItem(LEGACY_USER_STORAGE_KEY, raw);
@@ -311,10 +328,10 @@ const PacientePerfilScreen: React.FC = () => {
           } else {
             await SecureStore.setItemAsync(LEGACY_USER_STORAGE_KEY, raw);
           }
-        } catch {}
+        } catch { }
       }
     } catch {
-      setUser(null);
+      // Si falla la sincronización remota mantenemos los datos ya mostrados.
     } finally {
       setLoadingUser(false);
     }
@@ -329,36 +346,6 @@ const PacientePerfilScreen: React.FC = () => {
       loadUser();
     }, [loadUser])
   );
-
-  useEffect(() => {
-    if (!user) return;
-
-    setForm((prev) => ({
-      ...prev,
-      nombres: user.nombres || user.nombre || user.firstName || '',
-      apellidos: user.apellidos || user.apellido || user.lastName || '',
-      email: user.email || '',
-      telefono: user.telefono || '',
-      cedula: user.cedula || '',
-      fechaNacimiento: user.fechanacimiento || '',
-      genero: user.genero || '',
-      direccion: user.direccion || '',
-      tipoSangre: user.tipoSangre || '',
-      alergias: user.alergias || '',
-      medicamentos: user.medicamentos || '',
-      antecedentes: user.antecedentes || '',
-      emergenciaNombre: user.contactoEmergenciaNombre || '',
-      emergenciaTelefono: user.contactoEmergenciaTelefono || '',
-      emergenciaParentesco: user.contactoEmergenciaParentesco || '',
-      recibirEmail:
-        typeof user.recibirEmail === 'boolean' ? user.recibirEmail : prev.recibirEmail,
-      recibirSMS: typeof user.recibirSMS === 'boolean' ? user.recibirSMS : prev.recibirSMS,
-      compartirHistorial:
-        typeof user.compartirHistorial === 'boolean'
-          ? user.compartirHistorial
-          : prev.compartirHistorial,
-    }));
-  }, [user]);
 
   const fullName = useMemo(() => {
     const name = `${form.nombres} ${form.apellidos}`.trim();
@@ -411,15 +398,15 @@ const PacientePerfilScreen: React.FC = () => {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, raw);
       await AsyncStorage.setItem('user', raw);
-    } catch {}
+    } catch { }
     try {
       await SecureStore.setItemAsync(LEGACY_USER_STORAGE_KEY, raw);
-    } catch {}
+    } catch { }
     if (Platform.OS === 'web') {
       try {
         (globalThis as any).localStorage?.setItem(LEGACY_USER_STORAGE_KEY, raw);
         (globalThis as any).localStorage?.setItem('user', raw);
-      } catch {}
+      } catch { }
     }
   };
 
@@ -589,13 +576,10 @@ const PacientePerfilScreen: React.FC = () => {
 
             <TouchableOpacity style={styles.menuItemRow} onPress={() => navigation.navigate('NuevaConsultaPaciente')}>
               <MaterialIcons name="person-search" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>Buscar Médico</Text>
+              <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteCitas')}
-            >
+            <TouchableOpacity style={styles.menuItemRow}>
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
@@ -630,6 +614,14 @@ const PacientePerfilScreen: React.FC = () => {
             >
               <MaterialIcons name="account-circle" size={20} color={colors.primary} />
               <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.profile')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteConfiguracion')}
+            >
+              <MaterialIcons name="settings" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>

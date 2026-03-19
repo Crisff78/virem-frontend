@@ -156,8 +156,8 @@ const PacienteConfiguracionScreen: React.FC = () => {
     selectorField === 'language'
       ? t('config.selectLanguage')
       : selectorField === 'timeFormat'
-      ? t('config.selectTimeFormat')
-      : t('config.selectTimeZone');
+        ? t('config.selectTimeFormat')
+        : t('config.selectTimeZone');
 
   const openSelector = (field: 'language' | 'timeFormat' | 'timeZone') => {
     setSelectorField(field);
@@ -284,10 +284,7 @@ const PacienteConfiguracionScreen: React.FC = () => {
               <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteCitas')}
-            >
+            <TouchableOpacity style={styles.menuItemRow}>
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
@@ -302,18 +299,18 @@ const PacienteConfiguracionScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteRecetasDocumentos')}
+              onPress={() => navigation.navigate('PacienteChat')}
             >
-              <MaterialIcons name="description" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.recipesDocs')}</Text>
+              <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.chat')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteNotificaciones')}
+              onPress={() => navigation.navigate('PacienteRecetasDocumentos')}
             >
-              <MaterialIcons name="notifications" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.notifications')}</Text>
+              <MaterialIcons name="description" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.recipesDocs')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -527,19 +524,19 @@ const PacienteConfiguracionScreen: React.FC = () => {
             <Text style={styles.modalTitle}>{selectorTitle}</Text>
             {selectorField === 'language'
               ? optionsMap.language.map((option) => (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={styles.optionButton}
-                    onPress={() => applyValue(option.value)}
-                  >
-                    <Text style={styles.optionText}>{option.label}</Text>
-                  </TouchableOpacity>
-                ))
+                <TouchableOpacity
+                  key={option.value}
+                  style={styles.optionButton}
+                  onPress={() => applyValue(option.value)}
+                >
+                  <Text style={styles.optionText}>{option.label}</Text>
+                </TouchableOpacity>
+              ))
               : (selectorField ? optionsMap[selectorField] : []).map((option) => (
-                  <TouchableOpacity key={option} style={styles.optionButton} onPress={() => applyValue(option)}>
-                    <Text style={styles.optionText}>{option}</Text>
-                  </TouchableOpacity>
-                ))}
+                <TouchableOpacity key={option} style={styles.optionButton} onPress={() => applyValue(option)}>
+                  <Text style={styles.optionText}>{option}</Text>
+                </TouchableOpacity>
+              ))}
             <TouchableOpacity style={styles.cancelButton} onPress={() => setSelectorOpen(false)}>
               <Text style={styles.cancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
