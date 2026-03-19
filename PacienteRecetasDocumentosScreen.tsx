@@ -260,15 +260,24 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
               <MaterialIcons name="grid-view" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.home')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('NuevaConsultaPaciente')}
+            >
               <MaterialIcons name="person-search" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>Buscar Médico</Text>
+              <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('DashboardPaciente', { initialSection: 'appointments' })}
+            >
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('SalaEsperaVirtualPaciente')}
+            >
               <MaterialIcons name="videocam" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.videocall')}</Text>
             </TouchableOpacity>
@@ -289,6 +298,14 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
             >
               <MaterialIcons name="account-circle" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.profile')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteConfiguracion')}
+            >
+              <MaterialIcons name="settings" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>

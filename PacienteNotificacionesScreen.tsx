@@ -218,19 +218,36 @@ const PacienteNotificacionesScreen: React.FC = () => {
               <Text style={styles.menuText}>{t('menu.home')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('NuevaConsultaPaciente')}
+            >
               <MaterialIcons name="person-search" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('DashboardPaciente', { initialSection: 'appointments' })}
+            >
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('SalaEsperaVirtualPaciente')}
+            >
               <MaterialIcons name="videocam" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.videocall')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteChat')}
+            >
+              <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.chat')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -239,11 +256,6 @@ const PacienteNotificacionesScreen: React.FC = () => {
             >
               <MaterialIcons name="description" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.recipesDocs')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.menuItemRow, styles.menuItemActive]}>
-              <MaterialIcons name="notifications" size={20} color={colors.primary} />
-              <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.notifications')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

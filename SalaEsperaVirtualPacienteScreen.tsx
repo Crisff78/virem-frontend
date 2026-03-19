@@ -11,6 +11,8 @@ import {
   Switch,
 } from 'react-native';
 import type { ImageSourcePropType } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -20,6 +22,9 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
+const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
+const STORAGE_KEY = 'user';
+const LEGACY_USER_STORAGE_KEY = 'userProfile';
 
 const DoctorAvatar: ImageSourcePropType = { uri: 'https://i.pravatar.cc/220?img=13' };
 const CameraPreview: ImageSourcePropType = { uri: 'https://i.pravatar.cc/420?img=50' };
@@ -29,10 +34,31 @@ type DeviceOption = {
   label: string;
 };
 
+type User = {
+  nombres?: string;
+  apellidos?: string;
+  nombre?: string;
+  apellido?: string;
+  firstName?: string;
+  lastName?: string;
+  plan?: string;
+  fotoUrl?: string;
+};
+
+const parseUser = (raw: string | null): User | null => {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
 const SalaEsperaVirtualPacienteScreen: React.FC = () => {
 
   const { t, tx } = useLanguage();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [user, setUser] = useState<User | null>(null);
   const [cameraOn, setCameraOn] = useState(true);
   const [micOn, setMicOn] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -201,6 +227,43 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
     }
   }, [settingsOpen]);
 
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        if (Platform.OS === 'web') {
+          const localStorageUser = parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY));
+          if (localStorageUser) {
+            setUser(localStorageUser);
+            return;
+          }
+        }
+
+        const secureStoreUser = parseUser(await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY));
+        if (secureStoreUser) {
+          setUser(secureStoreUser);
+          return;
+        }
+
+        const asyncUser = parseUser(await AsyncStorage.getItem(STORAGE_KEY));
+        setUser(asyncUser);
+      } catch {
+        setUser(null);
+      }
+    };
+
+    loadUser();
+  }, []);
+
+  const fullName = `${(user?.nombres || user?.nombre || user?.firstName || '').trim()} ${(
+    user?.apellidos ||
+    user?.apellido ||
+    user?.lastName ||
+    ''
+  ).trim()}`.trim() || 'Paciente';
+  const planLabel = (user?.plan || '').trim() ? `Paciente ${(user?.plan || '').trim()}` : 'Paciente';
+  const userAvatarSource: ImageSourcePropType =
+    user?.fotoUrl && user.fotoUrl.trim().length > 0 ? { uri: user.fotoUrl.trim() } : DefaultAvatar;
+
   return (
     <View style={styles.container}>
       <View style={styles.sidebar}>
@@ -213,28 +276,49 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
             </View>
           </View>
 
+          <View style={styles.userBox}>
+            <Image source={userAvatarSource} style={styles.userAvatar} />
+            <Text style={styles.userName}>{fullName}</Text>
+            <Text style={styles.userPlan}>{planLabel}</Text>
+            {!user?.fotoUrl ? (
+              <Text style={styles.hintText}>No tienes foto. Ve a Perfil para agregarla.</Text>
+            ) : null}
+          </View>
+
           <View style={styles.menu}>
             <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('DashboardPaciente')}>
               <MaterialIcons name="grid-view" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.home')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('NuevaConsultaPaciente')}
+            >
               <MaterialIcons name="person-search" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>Buscar Médico</Text>
+              <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('DashboardPaciente', { initialSection: 'appointments' })}
+            >
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.menuItem, styles.menuItemActive]}>
               <MaterialIcons name="videocam" size={20} color={colors.primary} />
-              <Text style={[styles.menuText, styles.menuTextActive]}>
-                {tx({ es: 'Videollamada activa', en: 'Active Video Call', pt: 'Videochamada ativa' })}
-              </Text>
+              <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.videocall')}</Text>
               <View style={styles.menuLiveDot} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('PacienteChat')}
+            >
+              <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.chat')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -248,6 +332,14 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
             <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('PacientePerfil')}>
               <MaterialIcons name="account-circle" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.profile')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('PacienteConfiguracion')}
+            >
+              <MaterialIcons name="settings" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -593,8 +685,20 @@ const styles = StyleSheet.create({
   logo: { width: 44, height: 44, resizeMode: 'contain' },
   logoTitle: { fontSize: 20, fontWeight: '800', color: colors.dark, letterSpacing: 0.5 },
   logoSubtitle: { fontSize: 11, fontWeight: '700', color: colors.muted },
+  userBox: { marginTop: 18, alignItems: 'center', paddingVertical: 12 },
+  userAvatar: {
+    width: 76,
+    height: 76,
+    borderRadius: 76,
+    marginBottom: 10,
+    borderWidth: 4,
+    borderColor: '#f5f7fb',
+  },
+  userName: { fontWeight: '800', color: colors.dark, fontSize: 14 },
+  userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
+  hintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   menu: {
-    marginTop: 18,
+    marginTop: 10,
     gap: 6,
     flexDirection: Platform.OS === 'web' ? 'column' : 'row',
     flexWrap: 'wrap',

@@ -40,7 +40,7 @@ export type RootStackParamList = {
   Home: undefined;
 
   // ✅ NUEVA PANTALLA
-  DashboardPaciente: undefined;
+  DashboardPaciente: { initialSection?: 'home' | 'appointments' } | undefined;
   PacienteChat: undefined;
   PacienteNotificaciones: undefined;
   PacienteRecetasDocumentos: undefined;

@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -184,26 +184,6 @@ const PacienteChatScreen: React.FC = () => {
     return initialMessages;
   }, [selectedChatId]);
 
-  const renderMenuItem = (
-    icon: string,
-    label: string,
-    active = false,
-    onPress?: () => void
-  ) => (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed, hovered }: any) => [
-        styles.menuItem,
-        active && styles.menuItemActive,
-        hovered && !active && styles.menuItemHover,
-        pressed && styles.menuItemPressed,
-      ]}
-    >
-      <MaterialIcons name={icon} size={20} color={active ? colors.primary : colors.muted} />
-      <Text style={[styles.menuText, active && styles.menuTextActive]}>{label}</Text>
-    </Pressable>
-  );
-
   return (
     <View style={styles.container}>
       <View style={styles.sidebar}>
@@ -219,15 +199,72 @@ const PacienteChatScreen: React.FC = () => {
             <Image source={userAvatarSource} style={styles.userAvatar} />
             <Text style={styles.userName}>{fullName}</Text>
             <Text style={styles.userPlan}>{planLabel}</Text>
+            {!user?.fotoUrl ? (
+              <Text style={styles.hintText}>No tienes foto. Ve a Perfil para agregarla.</Text>
+            ) : null}
           </View>
-          {renderMenuItem('grid-view', t('menu.home'), false, () => navigation.navigate('DashboardPaciente'))}
-          {renderMenuItem('person-search', t('menu.searchDoctor'))}
-          {renderMenuItem('calendar-today', t('menu.appointments'))}
-          {renderMenuItem('videocam', t('menu.videocall'))}
-          {renderMenuItem('chat-bubble', t('menu.chat'), true)}
-          {renderMenuItem('description', t('menu.recipesDocs'), false, () => navigation.navigate('PacienteRecetasDocumentos'))}
-          {renderMenuItem('account-circle', t('menu.profile'), false, () => navigation.navigate('PacientePerfil'))}
-          {renderMenuItem('settings', t('menu.settings'), false, () => navigation.navigate('PacienteConfiguracion'))}
+          <View style={styles.menu}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('DashboardPaciente')}
+            >
+              <MaterialIcons name="grid-view" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.home')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('NuevaConsultaPaciente')}
+            >
+              <MaterialIcons name="person-search" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('DashboardPaciente', { initialSection: 'appointments' })}
+            >
+              <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.appointments')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('SalaEsperaVirtualPaciente')}
+            >
+              <MaterialIcons name="videocam" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.videocall')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.menuItemRow, styles.menuItemActive]}>
+              <MaterialIcons name="chat-bubble" size={20} color={colors.primary} />
+              <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.chat')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteRecetasDocumentos')}
+            >
+              <MaterialIcons name="description" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.recipesDocs')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacientePerfil')}
+            >
+              <MaterialIcons name="account-circle" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.profile')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteConfiguracion')}
+            >
+              <MaterialIcons name="settings" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.settings')}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         <TouchableOpacity
           style={styles.logoutButton}
@@ -320,22 +357,28 @@ const styles = StyleSheet.create({
   userAvatar: { width: 76, height: 76, borderRadius: 76, marginBottom: 10, borderWidth: 4, borderColor: '#f5f7fb' },
   userName: { fontWeight: '800', color: colors.dark, fontSize: 14, textAlign: 'center' },
   userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
-  menuItem: {
+  hintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700' },
+  menu: {
+    marginTop: 10,
+    gap: 6,
+    flex: Platform.OS === 'web' ? 1 : 0,
+    flexDirection: Platform.OS === 'web' ? 'column' : 'row',
+    flexWrap: 'wrap',
+  },
+  menuItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginTop: 6,
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 12,
+    minWidth: Platform.OS === 'web' ? 0 : 150,
   },
   menuItemActive: {
     backgroundColor: 'rgba(19,127,236,0.10)',
     borderRightWidth: 3,
     borderRightColor: colors.primary,
   },
-  menuItemHover: { backgroundColor: '#f4f8fc' },
-  menuItemPressed: { opacity: 0.7, transform: [{ scale: 0.985 }] },
   menuText: { fontSize: 14, color: colors.muted, fontWeight: '700' },
   menuTextActive: { color: colors.primary },
   logoutButton: {

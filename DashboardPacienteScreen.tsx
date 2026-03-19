@@ -17,7 +17,8 @@ import {
 import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './navigation/types';
 import { apiUrl } from './config/backend';
@@ -113,6 +114,8 @@ type NotificationItem = {
   unread: boolean;
 };
 
+type DashboardSection = 'home' | 'appointments';
+
 /* ===================== COMPONENTES ===================== */
 const QuickAction: React.FC<QuickActionProps> = ({ icon, label, color, bg, onPress }) => (
   <TouchableOpacity style={styles.quickCard} onPress={onPress} activeOpacity={0.88}>
@@ -188,8 +191,20 @@ const DoctorCard: React.FC<DoctorCardProps> = ({ name, spec, avatar }) => (
 /* ===================== PANTALLA ===================== */
 const DashboardPacienteScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'DashboardPaciente'>>();
   const { t, tx } = useLanguage();
-  const [user, setUser] = useState<User | null>(null);
+  const initialUser = useMemo(() => {
+    if (Platform.OS !== 'web') return null;
+    try {
+      return (
+        parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY)) ||
+        parseUser(localStorage.getItem(STORAGE_KEY))
+      );
+    } catch {
+      return null;
+    }
+  }, []);
+  const [user, setUser] = useState<User | null>(initialUser);
   const [loadingUser, setLoadingUser] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -238,7 +253,14 @@ const DashboardPacienteScreen: React.FC = () => {
   const [testStatus, setTestStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [testStatusText, setTestStatusText] = useState('Aún no se ha realizado la prueba.');
   const [chatReply, setChatReply] = useState('');
+  const [activeSection, setActiveSection] = useState<DashboardSection>('home');
   const chatAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (route.params?.initialSection) {
+      setActiveSection(route.params.initialSection);
+    }
+  }, [route.params?.initialSection]);
 
   // Cargar y sincronizar usuario paciente desde storage + backend.
   const loadUser = useCallback(async () => {
@@ -250,6 +272,10 @@ const DashboardPacienteScreen: React.FC = () => {
           : await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY);
       const rawUserFromAsync = await AsyncStorage.getItem(STORAGE_KEY);
       let sessionUser = parseUser(rawUserFromStorage) || parseUser(rawUserFromAsync);
+      if (sessionUser) {
+        // Hidrata inmediatamente desde cache para evitar parpadeo al abrir Inicio.
+        setUser(sessionUser);
+      }
 
       const rawTokenFromStorage =
         Platform.OS === 'web'
@@ -314,7 +340,7 @@ const DashboardPacienteScreen: React.FC = () => {
 
       setUser(sessionUser);
     } catch {
-      setUser(null);
+      // Si falla la sincronización remota, mantenemos el estado actual cacheado.
     } finally {
       setLoadingUser(false);
     }
@@ -448,6 +474,50 @@ const DashboardPacienteScreen: React.FC = () => {
   };
 
   const unreadNotifications = notifications.filter((n) => n.unread).length;
+  const appointmentItems = [
+    {
+      id: 'a1',
+      status: 'CONFIRMADA',
+      mode: 'Videollamada',
+      modeColor: '#137fec',
+      doctor: 'Dr. Alejandro Martínez',
+      specialty: 'Cardiología Clínica',
+      date: 'Jueves, 24 Oct',
+      time: '10:30 AM (En 45 min)',
+      avatar: Doctor1,
+      primaryButton: 'Entrar',
+      primaryButtonStyle: 'blue' as const,
+      secondaryButton: 'Detalles',
+    },
+    {
+      id: 'a2',
+      status: 'CONFIRMADA',
+      mode: 'Presencial',
+      modeColor: '#f97316',
+      doctor: 'Dra. Elena Rodríguez',
+      specialty: 'Dermatología',
+      date: 'Lunes, 28 Oct',
+      time: '04:00 PM',
+      avatar: Doctor2,
+      primaryButton: 'Reagendar',
+      primaryButtonStyle: 'light' as const,
+      secondaryButton: 'Detalles',
+    },
+    {
+      id: 'a3',
+      status: 'PENDIENTE DE PAGO',
+      mode: 'Videollamada',
+      modeColor: '#137fec',
+      doctor: 'Dr. Ricardo Vaca',
+      specialty: 'Medicina General',
+      date: 'Miércoles, 30 Oct',
+      time: '09:00 AM',
+      avatar: Doctor1,
+      primaryButton: 'Pagar Cita',
+      primaryButtonStyle: 'dark' as const,
+      secondaryButton: 'Cancelar',
+    },
+  ];
 
   const markAllNotificationsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
@@ -483,22 +553,48 @@ const DashboardPacienteScreen: React.FC = () => {
 
           {/* Menú */}
           <View style={styles.menu}>
-            <TouchableOpacity style={[styles.menuItemRow, styles.menuItemActive]}>
-              <MaterialIcons name="grid-view" size={20} color={colors.primary} />
-              <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.home')}</Text>
+            <TouchableOpacity
+              style={[styles.menuItemRow, activeSection === 'home' && styles.menuItemActive]}
+              onPress={() => setActiveSection('home')}
+            >
+              <MaterialIcons
+                name="grid-view"
+                size={20}
+                color={activeSection === 'home' ? colors.primary : colors.muted}
+              />
+              <Text style={[styles.menuText, activeSection === 'home' && styles.menuTextActive]}>
+                {t('menu.home')}
+              </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('NuevaConsultaPaciente')}
+            >
               <MaterialIcons name="person-search" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
-              <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.appointments')}</Text>
+            <TouchableOpacity
+              style={[styles.menuItemRow, activeSection === 'appointments' && styles.menuItemActive]}
+              onPress={() => setActiveSection('appointments')}
+            >
+              <MaterialIcons
+                name="calendar-today"
+                size={20}
+                color={activeSection === 'appointments' ? colors.primary : colors.muted}
+              />
+              <Text
+                style={[styles.menuText, activeSection === 'appointments' && styles.menuTextActive]}
+              >
+                {t('menu.appointments')}
+              </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('SalaEsperaVirtualPaciente')}
+            >
               <MaterialIcons name="videocam" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.videocall')}</Text>
             </TouchableOpacity>
@@ -546,6 +642,8 @@ const DashboardPacienteScreen: React.FC = () => {
 
       {/* ===================== MAIN ===================== */}
       <ScrollView style={styles.main} contentContainerStyle={{ paddingBottom: 30 }}>
+        {activeSection === 'home' ? (
+          <>
         <View style={styles.header}>
           <View style={styles.searchBox}>
             <MaterialIcons name="search" size={20} color={colors.muted} />
@@ -614,6 +712,7 @@ const DashboardPacienteScreen: React.FC = () => {
             label="Agendar cita"
             color="#f97316"
             bg="#fff7ed"
+            onPress={() => setActiveSection('appointments')}
           />
           <QuickAction
             icon="chat"
@@ -635,7 +734,7 @@ const DashboardPacienteScreen: React.FC = () => {
           <View style={styles.colLeft}>
             <View style={styles.rowBetween}>
               <Text style={styles.sectionTitle}>Citas pendientes</Text>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => setActiveSection('appointments')}>
                 <Text style={styles.link}>Ver todas</Text>
               </TouchableOpacity>
             </View>
@@ -705,6 +804,123 @@ const DashboardPacienteScreen: React.FC = () => {
             </Text>
           </View>
         </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.appointmentsHeaderRow}>
+              <View>
+                <Text style={styles.appointmentsTitle}>Mis Citas</Text>
+                <Text style={styles.appointmentsSubtitle}>
+                  Gestiona tus consultas médicas programadas y pasadas.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.newAppointmentBtn}
+                onPress={() => navigation.navigate('NuevaConsultaPaciente')}
+              >
+                <MaterialIcons name="add" size={16} color="#fff" />
+                <Text style={styles.newAppointmentBtnText}>Nueva Cita</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.appointmentsTabs}>
+              <TouchableOpacity style={[styles.appointmentsTab, styles.appointmentsTabActive]}>
+                <Text style={[styles.appointmentsTabText, styles.appointmentsTabTextActive]}>
+                  Próximas
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.appointmentsTab}>
+                <Text style={styles.appointmentsTabText}>Historial</Text>
+              </TouchableOpacity>
+            </View>
+
+            {appointmentItems.map((item) => (
+              <View key={item.id} style={styles.appointmentItemCard}>
+                <Image source={item.avatar} style={styles.appointmentItemAvatar} />
+
+                <View style={styles.appointmentItemBody}>
+                  <View style={styles.appointmentItemTags}>
+                    <Text style={styles.appointmentStatusTag}>{item.status}</Text>
+                    <View style={styles.appointmentModeTag}>
+                      <MaterialIcons
+                        name={item.mode === 'Presencial' ? 'person-pin-circle' : 'videocam'}
+                        size={12}
+                        color={item.modeColor}
+                      />
+                      <Text style={[styles.appointmentModeTagText, { color: item.modeColor }]}>
+                        {item.mode}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.appointmentDoctor}>{item.doctor}</Text>
+                  <Text style={styles.appointmentSpecialty}>{item.specialty}</Text>
+                </View>
+
+                <View style={styles.appointmentDateWrap}>
+                  <View style={styles.appointmentDateRow}>
+                    <MaterialIcons name="calendar-today" size={14} color={colors.primary} />
+                    <Text style={styles.appointmentDateText}>{item.date}</Text>
+                  </View>
+                  <View style={styles.appointmentDateRow}>
+                    <MaterialIcons name="access-time" size={14} color={colors.primary} />
+                    <Text style={styles.appointmentTimeText}>{item.time}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.appointmentActions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.appointmentActionBtn,
+                      item.primaryButtonStyle === 'blue'
+                        ? styles.appointmentActionBtnBlue
+                        : item.primaryButtonStyle === 'dark'
+                        ? styles.appointmentActionBtnDark
+                        : styles.appointmentActionBtnLight,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.appointmentActionBtnText,
+                        item.primaryButtonStyle === 'light' && styles.appointmentActionBtnTextDark,
+                      ]}
+                    >
+                      {item.primaryButton}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.appointmentActionBtn, styles.appointmentActionBtnLight]}
+                  >
+                    <Text
+                      style={[
+                        styles.appointmentActionBtnText,
+                        styles.appointmentActionBtnTextDark,
+                      ]}
+                    >
+                      {item.secondaryButton}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+
+            <View style={styles.urgentCard}>
+              <View style={styles.urgentLeft}>
+                <MaterialIcons name="info" size={20} color={colors.primary} />
+                <View>
+                  <Text style={styles.urgentTitle}>¿Necesitas una consulta urgente?</Text>
+                  <Text style={styles.urgentSubtitle}>
+                    Nuestro servicio de Urgencias Virtuales está disponible las 24 horas.
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity>
+                <Text style={styles.urgentLink}>Ver ahora</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </ScrollView>
 
       {chatOpen ? (
@@ -1092,6 +1308,120 @@ const styles = StyleSheet.create({
 
   title: { fontSize: 28, fontWeight: '900', color: colors.dark, marginTop: 8 },
   subtitle: { fontSize: 14, color: colors.muted, marginTop: 6, marginBottom: 18, fontWeight: '600' },
+
+  appointmentsHeaderRow: {
+    marginTop: 4,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  appointmentsTitle: { fontSize: 36, fontWeight: '900', color: colors.dark },
+  appointmentsSubtitle: { marginTop: 2, fontSize: 13, color: '#8aa7bf', fontWeight: '600' },
+  newAppointmentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    shadowColor: colors.dark,
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  newAppointmentBtnText: { color: '#fff', fontSize: 12, fontWeight: '900' },
+  appointmentsTabs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dfeaf6',
+  },
+  appointmentsTab: {
+    paddingVertical: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  appointmentsTabActive: { borderBottomColor: colors.primary },
+  appointmentsTabText: { color: '#7f9ab2', fontSize: 13, fontWeight: '700' },
+  appointmentsTabTextActive: { color: colors.primary, fontWeight: '900' },
+  appointmentItemCard: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e0eaf5',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+    alignItems: Platform.OS === 'web' ? 'center' : 'flex-start',
+    gap: 12,
+  },
+  appointmentItemAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#f1f5f9',
+  },
+  appointmentItemBody: { flex: 1, minWidth: 180 },
+  appointmentItemTags: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  appointmentStatusTag: {
+    backgroundColor: '#eaf7ed',
+    color: '#1f9d4d',
+    fontSize: 9,
+    fontWeight: '900',
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    borderRadius: 999,
+  },
+  appointmentModeTag: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  appointmentModeTagText: { fontSize: 10, fontWeight: '800' },
+  appointmentDoctor: { marginTop: 6, color: colors.dark, fontWeight: '900', fontSize: 18 },
+  appointmentSpecialty: { marginTop: 2, color: colors.muted, fontSize: 15, fontWeight: '600' },
+  appointmentDateWrap: { minWidth: Platform.OS === 'web' ? 175 : 0, gap: 8 },
+  appointmentDateRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  appointmentDateText: { color: colors.dark, fontWeight: '800', fontSize: 14 },
+  appointmentTimeText: { color: '#7f9ab2', fontWeight: '700', fontSize: 13 },
+  appointmentActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: Platform.OS === 'web' ? 'auto' : 0,
+  },
+  appointmentActionBtn: {
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+  },
+  appointmentActionBtnBlue: { backgroundColor: colors.primary },
+  appointmentActionBtnDark: { backgroundColor: '#21314d' },
+  appointmentActionBtnLight: { backgroundColor: '#f1f5f9' },
+  appointmentActionBtnText: { color: '#fff', fontWeight: '900', fontSize: 12 },
+  appointmentActionBtnTextDark: { color: '#516987' },
+  urgentCard: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#bcd6f1',
+    backgroundColor: '#eaf4ff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  urgentLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 220 },
+  urgentTitle: { color: colors.dark, fontSize: 15, fontWeight: '900' },
+  urgentSubtitle: { marginTop: 2, color: '#6d89a2', fontSize: 12, fontWeight: '600' },
+  urgentLink: { color: colors.primary, fontWeight: '900', fontSize: 13 },
 
   bigCard: {
     backgroundColor: '#fff',

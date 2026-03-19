@@ -384,15 +384,22 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
             </View>
           </View>
 
+          <View style={styles.sideUserBox}>
+            <Image source={userAvatarSource} style={styles.sideUserAvatar} />
+            <Text style={styles.sideUserName}>{fullName}</Text>
+            <Text style={styles.sideUserPlan}>{planLabel}</Text>
+            {!user?.fotoUrl ? (
+              <Text style={styles.sideHintText}>No tienes foto. Ve a Perfil para agregarla.</Text>
+            ) : null}
+          </View>
+
           <View style={styles.menu}>
             <TouchableOpacity
               style={styles.menuItemRow}
               onPress={() => navigation.navigate('DashboardPaciente')}
             >
               <MaterialIcons name="grid-view" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>
-                {tx({ es: 'Dashboard', en: 'Dashboard', pt: 'Painel' })}
-              </Text>
+              <Text style={styles.menuText}>{t('menu.home')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -400,33 +407,55 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
               onPress={() => navigation.navigate('NuevaConsultaPaciente')}
             >
               <MaterialIcons name="person-search" size={20} color={colors.primary} />
-              <Text style={[styles.menuText, styles.menuTextActive]}>
-                {tx({ es: 'Buscar Especialista', en: 'Find Specialist', pt: 'Buscar Especialista' })}
-              </Text>
+              <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('DashboardPaciente', { initialSection: 'appointments' })}
+            >
               <MaterialIcons name="calendar-month" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('SalaEsperaVirtualPaciente')}
+            >
               <MaterialIcons name="videocam" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>
-                {tx({ es: 'Telemedicina', en: 'Telemedicine', pt: 'Telemedicina' })}
-              </Text>
+              <Text style={styles.menuText}>{t('menu.videocall')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteChat')}
+            >
+              <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.chat')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteRecetasDocumentos')}
+            >
               <MaterialIcons name="description" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.recipesDocs')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
-              <MaterialIcons name="folder-shared" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>
-                {tx({ es: 'Historial Clinico', en: 'Clinical History', pt: 'Historico Clinico' })}
-              </Text>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacientePerfil')}
+            >
+              <MaterialIcons name="account-circle" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.profile')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteConfiguracion')}
+            >
+              <MaterialIcons name="settings" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -653,6 +682,18 @@ const styles = StyleSheet.create({
   logo: { width: 30, height: 30, resizeMode: 'contain' },
   logoTitle: { fontSize: 20, fontWeight: '900', color: colors.dark, letterSpacing: 0.5 },
   logoSubtitle: { fontSize: 10, color: colors.muted, fontWeight: '700' },
+  sideUserBox: { marginTop: 8, alignItems: 'center', paddingVertical: 12 },
+  sideUserAvatar: {
+    width: 76,
+    height: 76,
+    borderRadius: 76,
+    marginBottom: 10,
+    borderWidth: 4,
+    borderColor: '#f5f7fb',
+  },
+  sideUserName: { fontWeight: '800', color: colors.dark, fontSize: 14, textAlign: 'center' },
+  sideUserPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
+  sideHintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   menu: { gap: 4, flexDirection: Platform.OS === 'web' ? 'column' : 'row', flexWrap: 'wrap' },
   menuItemRow: {
     flexDirection: 'row',
