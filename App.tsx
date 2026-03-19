@@ -16,6 +16,9 @@ import VerificarIdentidadScreen from "./VerificarIdentidadScreen";
 
 import DashboardPacienteScreen from "./DashboardPacienteScreen";
 import DashboardMedico from "./DashboardMedico";
+import MedicoCitasScreen from "./MedicoCitasScreen";
+import MedicoPacientesScreen from "./MedicoPacientesScreen";
+import MedicoChatScreen from "./MedicoChatScreen";
 import NuevaConsultaPacienteScreen from "./NuevaConsultaPacienteScreen";
 import SalaEsperaVirtualPacienteScreen from "./SalaEsperaVirtualPacienteScreen";
 import EspecialistasPorEspecialidadScreen from "./EspecialistasPorEspecialidadScreen";
@@ -62,6 +65,9 @@ const linking = {
       EspecialistasPorEspecialidad: "especialistas/:specialty",
       PerfilEspecialistaAgendar: "perfil-especialista/:specialty/:doctorId",
       DashboardMedico: "dashboard-medico",
+      MedicoCitas: "medico-citas",
+      MedicoPacientes: "medico-pacientes",
+      MedicoChat: "medico-chat",
       MedicoPerfil: "medico-perfil",
     },
   },
@@ -141,6 +147,9 @@ const App: React.FC = () => {
           component={PerfilEspecialistaAgendarScreen}
         />
           <Stack.Screen name="DashboardMedico" component={DashboardMedico} />
+          <Stack.Screen name="MedicoCitas" component={MedicoCitasScreen} />
+          <Stack.Screen name="MedicoPacientes" component={MedicoPacientesScreen} />
+          <Stack.Screen name="MedicoChat" component={MedicoChatScreen} />
           <Stack.Screen name="MedicoPerfil" component={MedicoPerfilScreen} />
         </Stack.Navigator>
       </NavigationContainer>

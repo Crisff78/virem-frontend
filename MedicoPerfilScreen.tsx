@@ -84,7 +84,7 @@ type MedicoProfile = {
 type SideItem = {
   icon: string;
   label: string;
-  route?: keyof RootStackParamList;
+  route?: 'DashboardMedico' | 'MedicoPerfil' | 'MedicoCitas' | 'MedicoPacientes' | 'MedicoChat';
   active?: boolean;
   badge?: { text: string; color: string };
 };
@@ -564,18 +564,41 @@ const MedicoPerfilScreen: React.FC = () => {
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   }, [navigation]);
 
+  const dateText = useMemo(
+    () =>
+      new Intl.DateTimeFormat('es-DO', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      }).format(new Date()),
+    []
+  );
+
+  const timeText = useMemo(
+    () =>
+      new Intl.DateTimeFormat('es-DO', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date()),
+    []
+  );
+
   const sideItems: SideItem[] = [
     { icon: 'dashboard', label: 'Dashboard', route: 'DashboardMedico' },
-    { icon: 'calendar-today', label: 'Agenda' },
-    { icon: 'group', label: 'Pacientes' },
+    { icon: 'calendar-today', label: 'Agenda', route: 'MedicoCitas' },
+    { icon: 'group', label: 'Pacientes', route: 'MedicoPacientes' },
     { icon: 'notification-important', label: 'Solicitudes', badge: { text: '5', color: '#ef4444' } },
-    { icon: 'chat-bubble', label: 'Mensajes', badge: { text: '3', color: colors.primary } },
+    { icon: 'chat-bubble', label: 'Mensajes', badge: { text: '3', color: colors.primary }, route: 'MedicoChat' },
     { icon: 'person', label: 'Perfil', route: 'MedicoPerfil', active: true },
-    { icon: 'settings', label: 'Configuracion' },
+    { icon: 'settings', label: 'Configuracion', route: 'MedicoPerfil' },
   ];
 
   const handleSideItemPress = (item: SideItem) => {
-    if (!item.route || item.route === 'MedicoPerfil') return;
+    if (!item.route) {
+      Alert.alert('Solicitudes', 'Las solicitudes pendientes se integraran en un modulo dedicado.');
+      return;
+    }
+    if (item.route === 'MedicoPerfil') return;
     navigation.navigate(item.route);
   };
 
@@ -628,13 +651,21 @@ const MedicoPerfilScreen: React.FC = () => {
       </View>
 
       <ScrollView style={styles.main} contentContainerStyle={{ paddingBottom: 26 }}>
-        <View style={styles.titleWrap}>
-          <Text style={styles.pageTitle}>Perfil del Medico</Text>
-          <View style={styles.subtitleRow}>
-            <Text style={styles.pageSubtitle}>
-              Aqui puedes ver tus datos verificados y actualizar tu foto de perfil.
-            </Text>
-            {loading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+        <View style={styles.headerWrap}>
+          <View style={styles.headerRow}>
+            <View style={styles.headerLeft}>
+              <Text style={styles.pageTitle}>Perfil del Medico</Text>
+              <View style={styles.subtitleRow}>
+                <Text style={styles.pageSubtitle}>
+                  Aqui puedes ver tus datos verificados y actualizar tu foto de perfil.
+                </Text>
+                {loading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+              </View>
+            </View>
+            <View style={styles.headerRight}>
+              <Text style={styles.headerDate}>{dateText}</Text>
+              <Text style={styles.headerTime}>{timeText}</Text>
+            </View>
           </View>
         </View>
 
@@ -734,15 +765,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 12,
+    borderRadius: 10,
     minWidth: Platform.OS === 'web' ? 0 : 150,
   },
   menuItemActive: {
-    backgroundColor: 'rgba(19,127,236,0.10)',
-    borderRightWidth: 3,
-    borderRightColor: colors.primary,
+    backgroundColor: 'rgba(19,127,236,0.12)',
   },
   menuText: { fontSize: 14, fontWeight: '700', color: colors.muted },
   menuTextActive: { color: colors.primary },
@@ -769,10 +798,22 @@ const styles = StyleSheet.create({
   logoutText: { color: '#fff', fontWeight: '800' },
   main: {
     flex: 1,
-    paddingHorizontal: Platform.OS === 'web' ? 24 : 14,
-    paddingTop: Platform.OS === 'web' ? 18 : 12,
   },
-  titleWrap: { marginBottom: 14 },
+  headerWrap: {
+    paddingHorizontal: Platform.OS === 'web' ? 32 : 14,
+    paddingTop: Platform.OS === 'web' ? 32 : 14,
+    paddingBottom: 12,
+  },
+  headerRow: {
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+    justifyContent: 'space-between',
+    alignItems: Platform.OS === 'web' ? 'flex-end' : 'flex-start',
+    gap: 12,
+  },
+  headerLeft: { flex: 1 },
+  headerRight: { alignItems: Platform.OS === 'web' ? 'flex-end' : 'flex-start' },
+  headerDate: { color: colors.dark, fontSize: 14, fontWeight: '800' },
+  headerTime: { color: colors.muted, fontSize: 12, marginTop: 2 },
   pageTitle: { color: colors.dark, fontSize: 28, fontWeight: '900' },
   subtitleRow: {
     marginTop: 4,
@@ -781,8 +822,9 @@ const styles = StyleSheet.create({
     gap: 10,
     flexWrap: 'wrap',
   },
-  pageSubtitle: { color: colors.muted, fontSize: 14, fontWeight: '600' },
+  pageSubtitle: { color: colors.muted, fontSize: 16, fontWeight: '500' },
   card: {
+    marginHorizontal: Platform.OS === 'web' ? 32 : 14,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#dbe8f4',
@@ -837,6 +879,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   successBanner: {
+    marginHorizontal: Platform.OS === 'web' ? 32 : 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,

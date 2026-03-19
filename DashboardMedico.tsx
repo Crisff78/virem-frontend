@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -28,19 +28,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 const ViremLogo = require('./assets/imagenes/descarga.png');
 type MaterialIconName = keyof typeof MaterialIcons.glyphMap;
 
-// Usa tu logo como avatar default (para no depender de avatar-default.png)
-const DefaultAvatar = ViremLogo;
-
-const PatientAvatar: ImageSourcePropType = {
-  uri: 'https://i.pravatar.cc/150?img=22',
-};
+const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
+const PatientAvatar: ImageSourcePropType = DefaultAvatar;
 
 type SideItem = {
   icon: MaterialIconName;
   label: string;
   badge?: { text: string; color: string };
   active?: boolean;
-  route?: keyof RootStackParamList;
+  route?: 'DashboardMedico' | 'MedicoPerfil' | 'MedicoCitas' | 'MedicoPacientes' | 'MedicoChat';
 };
 
 type StatCardProps = {
@@ -102,6 +98,7 @@ type DashboardAgendaItem = {
   time: string;
   name: string;
   detail: string;
+  patientId?: string;
   patientCode?: string;
   fechaHoraInicio?: string | null;
 };
@@ -118,6 +115,16 @@ type DashboardPayload = {
   stats: DashboardStats;
   agendaHoy: DashboardAgendaItem[];
   expedientesRecientes: DashboardExpedienteItem[];
+};
+
+type MedicoUpcomingCita = {
+  citaid: string;
+  fechaHoraInicio: string | null;
+  estado: string;
+  paciente: {
+    pacienteid: string;
+    nombreCompleto: string;
+  };
 };
 
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
@@ -159,6 +166,24 @@ const sanitizeFotoUrl = (value: unknown): string => {
   if (!clean) return '';
   if (clean.toLowerCase().startsWith('blob:')) return '';
   return clean;
+};
+
+const parseDateMs = (value: string | null | undefined) => {
+  if (!value) return Number.POSITIVE_INFINITY;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+};
+
+const formatDateTime = (value: string | null | undefined) => {
+  if (!value) return 'Sin horario';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Sin horario';
+  return new Intl.DateTimeFormat('es-DO', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
 };
 
 const getInitialMedicoUiFromWeb = (): InitialMedicoUi => {
@@ -312,6 +337,7 @@ const DashboardMedico: React.FC = () => {
   const [doctorSpec, setDoctorSpec] = useState(initialMedicoUi.doctorSpec);
   const [doctorAvatar, setDoctorAvatar] = useState<ImageSourcePropType>(initialMedicoUi.doctorAvatar);
   const [dashboardData, setDashboardData] = useState<DashboardPayload>(EMPTY_DASHBOARD);
+  const [upcomingCitas, setUpcomingCitas] = useState<MedicoUpcomingCita[]>([]);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
   const [profileReady, setProfileReady] = useState(initialMedicoUi.hasSeed);
 
@@ -352,6 +378,7 @@ const DashboardMedico: React.FC = () => {
             time: String(item?.time || ''),
             name: String(item?.name || 'Paciente'),
             detail: String(item?.detail || 'Consulta programada'),
+            patientId: String(item?.patientId || ''),
             patientCode: String(item?.patientCode || ''),
             fechaHoraInicio: item?.fechaHoraInicio || null,
           }))
@@ -387,6 +414,40 @@ const DashboardMedico: React.FC = () => {
     }
   }, []);
 
+  const loadUpcomingCitas = useCallback(async (authToken: string) => {
+    if (!authToken) {
+      setUpcomingCitas([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(apiUrl('/api/users/me/citas?scope=upcoming&limit=20'), {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!(response.ok && payload?.success && Array.isArray(payload?.citas))) {
+        setUpcomingCitas([]);
+        return;
+      }
+
+      const mapped = (payload.citas as any[]).map((item) => ({
+        citaid: String(item?.citaid || ''),
+        fechaHoraInicio: item?.fechaHoraInicio || null,
+        estado: String(item?.estado || 'Pendiente'),
+        paciente: {
+          pacienteid: String(item?.paciente?.pacienteid || ''),
+          nombreCompleto: String(item?.paciente?.nombreCompleto || 'Paciente'),
+        },
+      }));
+
+      mapped.sort((a, b) => parseDateMs(a?.fechaHoraInicio) - parseDateMs(b?.fechaHoraInicio));
+      setUpcomingCitas(mapped);
+    } catch {
+      setUpcomingCitas([]);
+    }
+  }, []);
+
   const loadMedicoProfile = useCallback(async () => {
     try {
       const rawUserFromStorage =
@@ -407,6 +468,7 @@ const DashboardMedico: React.FC = () => {
       const authToken = String(rawTokenFromStorage || rawTokenFromAsync || '').trim();
 
       await loadDashboardData(authToken);
+      await loadUpcomingCitas(authToken);
 
       if (authToken) {
         try {
@@ -595,7 +657,7 @@ const DashboardMedico: React.FC = () => {
     } finally {
       setProfileReady(true);
     }
-  }, [loadDashboardData]);
+  }, [loadDashboardData, loadUpcomingCitas]);
 
   useEffect(() => {
     loadMedicoProfile();
@@ -648,42 +710,25 @@ const DashboardMedico: React.FC = () => {
       }).format(new Date()),
     []
   );
+  const nextCita = upcomingCitas[0] || null;
+  const bannerPatientName = String(nextCita?.paciente?.nombreCompleto || '').trim() || 'Paciente';
+  const bannerCitaText = nextCita
+    ? `${formatDateTime(nextCita.fechaHoraInicio)} · ${String(nextCita.estado || 'Pendiente').trim() || 'Pendiente'}`
+    : 'No tienes videoconsultas pendientes';
 
   const sideItems: SideItem[] = [
     { icon: 'dashboard', label: 'Dashboard', active: true, route: 'DashboardMedico' },
-    { icon: 'calendar-today', label: 'Agenda' },
-    { icon: 'group', label: 'Pacientes' },
+    { icon: 'calendar-today', label: 'Agenda', route: 'MedicoCitas' },
+    { icon: 'group', label: 'Pacientes', route: 'MedicoPacientes' },
     { icon: 'notification-important', label: 'Solicitudes', badge: { text: '5', color: colors.red } },
-    { icon: 'chat-bubble', label: 'Mensajes', badge: { text: '3', color: colors.primary } },
+    { icon: 'chat-bubble', label: 'Mensajes', badge: { text: '3', color: colors.primary }, route: 'MedicoChat' },
     { icon: 'person', label: 'Perfil', route: 'MedicoPerfil' },
-    { icon: 'settings', label: 'Configuración' },
+    { icon: 'settings', label: 'Configuracion', route: 'MedicoPerfil' },
   ];
 
   const handleSideItemPress = (item: SideItem) => {
     if (!item.route) {
-      if (item.label === 'Agenda') {
-        Alert.alert('Agenda', `Tienes ${dashboardData.agendaHoy.length} cita(s) para hoy.`);
-        return;
-      }
-      if (item.label === 'Pacientes') {
-        Alert.alert(
-          'Pacientes',
-          `Tienes ${dashboardData.expedientesRecientes.length} expediente(s) reciente(s).`
-        );
-        return;
-      }
-      if (item.label === 'Solicitudes') {
-        Alert.alert('Solicitudes', 'Las solicitudes pendientes se mostraran en una proxima version.');
-        return;
-      }
-      if (item.label === 'Mensajes') {
-        Alert.alert('Mensajes', 'El modulo de mensajeria medica estara disponible pronto.');
-        return;
-      }
-      if (item.label === 'Configuracion') {
-        navigation.navigate('MedicoPerfil');
-        return;
-      }
+      Alert.alert('Solicitudes', 'Las solicitudes pendientes se integraran en un modulo dedicado.');
       return;
     }
     if (item.route === 'DashboardMedico') return;
@@ -691,7 +736,7 @@ const DashboardMedico: React.FC = () => {
   };
 
   const handleVideoCall = () => {
-    const nextAgenda = dashboardData.agendaHoy[0];
+    const nextAgenda = upcomingCitas[0] || null;
     if (!nextAgenda) {
       Alert.alert('Videollamada', 'No tienes citas disponibles para iniciar en este momento.');
       return;
@@ -699,7 +744,9 @@ const DashboardMedico: React.FC = () => {
 
     Alert.alert(
       'Videollamada lista',
-      `Paciente: ${nextAgenda.name}\nHora: ${nextAgenda.time}\nDetalle: ${nextAgenda.detail}`
+      `Paciente: ${nextAgenda.paciente?.nombreCompleto || 'Paciente'}\nHora: ${formatDateTime(
+        nextAgenda.fechaHoraInicio
+      )}\nEstado: ${nextAgenda.estado}`
     );
   };
 
@@ -815,17 +862,21 @@ const DashboardMedico: React.FC = () => {
                   <View style={styles.nowPill}>
                     <Text style={styles.nowPillText}>AHORA</Text>
                   </View>
-                  <Text style={styles.bannerTitle}>Videollamada con Juan Pérez</Text>
+                  <Text style={styles.bannerTitle}>
+                    {nextCita ? `Videollamada con ${bannerPatientName}` : 'Sin videoconsultas activas'}
+                  </Text>
                 </View>
-                <Text style={styles.bannerSub}>
-                  Consulta de Seguimiento Post-Operatorio • Programada 10:30 AM
-                </Text>
+                <Text style={styles.bannerSub}>{bannerCitaText}</Text>
               </View>
             </View>
 
-            <TouchableOpacity activeOpacity={0.9} style={styles.bannerBtn} onPress={handleVideoCall}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={[styles.bannerBtn, !nextCita ? styles.bannerBtnDisabled : null]}
+              onPress={handleVideoCall}
+            >
               <MaterialIcons name="videocam" size={20} color="#fff" />
-              <Text style={styles.bannerBtnText}>Iniciar Videollamada</Text>
+              <Text style={styles.bannerBtnText}>{nextCita ? 'Iniciar Videollamada' : 'Sin cita activa'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -840,11 +891,7 @@ const DashboardMedico: React.FC = () => {
           <View style={styles.section}>
             <View style={styles.sectionHead}>
               <Text style={styles.sectionTitle}>Agenda de hoy</Text>
-              <TouchableOpacity
-                onPress={() =>
-                  Alert.alert('Agenda', `Citas programadas hoy: ${dashboardData.agendaHoy.length}`)
-                }
-              >
+              <TouchableOpacity onPress={() => navigation.navigate('MedicoCitas')}>
                 <Text style={styles.sectionLink}>Ver calendario</Text>
               </TouchableOpacity>
             </View>
@@ -858,12 +905,10 @@ const DashboardMedico: React.FC = () => {
                     name={item.name}
                     detail={item.detail}
                     onPress={() =>
-                      Alert.alert(
-                        item.name,
-                        `Hora: ${item.time}\nDetalle: ${item.detail}\nCodigo: ${
-                          item.patientCode || 'N/D'
-                        }`
-                      )
+                      navigation.navigate('MedicoChat', {
+                        patientId: String(item.patientId || ''),
+                        patientName: item.name,
+                      })
                     }
                   />
                 ))
@@ -902,10 +947,10 @@ const DashboardMedico: React.FC = () => {
                     id={item.code}
                     lastSeen={item.lastSeenText}
                     onPress={() =>
-                      Alert.alert(
-                        item.name,
-                        `Codigo: ${item.code || 'N/D'}\nUltima consulta: ${item.lastSeenText}`
-                      )
+                      navigation.navigate('MedicoChat', {
+                        patientId: item.id,
+                        patientName: item.name,
+                      })
                     }
                   />
                 ))
@@ -1168,6 +1213,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 10,
   },
+  bannerBtnDisabled: {
+    backgroundColor: '#7aa8d8',
+  },
   bannerBtnText: { color: '#fff', fontWeight: '900' },
 
   bannerIconGhost: {
@@ -1264,4 +1312,5 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, color: colors.viremDark, fontWeight: '600' },
 });
+
 
