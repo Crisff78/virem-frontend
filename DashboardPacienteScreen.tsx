@@ -613,17 +613,6 @@ const DashboardPacienteScreen: React.FC = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
   };
 
-  if (loadingUser) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ marginTop: 10, color: colors.muted, fontWeight: '700' }}>
-          Cargando tu información...
-        </Text>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
       {/* ===================== SIDEBAR ===================== */}
@@ -674,7 +663,10 @@ const DashboardPacienteScreen: React.FC = () => {
               <Text style={styles.menuText}>{t('menu.videocall')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteChat')}
+            >
               <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.chat')}</Text>
             </TouchableOpacity>
@@ -802,7 +794,13 @@ const DashboardPacienteScreen: React.FC = () => {
             bg="#fff7ed"
             onPress={() => navigation.navigate('NuevaConsultaPaciente')}
           />
-          <QuickAction icon="chat" label="Consultar Chat" color="#14b8a6" bg="#f0fdfa" />
+          <QuickAction
+            icon="chat"
+            label="Consultar Chat"
+            color="#14b8a6"
+            bg="#f0fdfa"
+            onPress={() => navigation.navigate('PacienteChat')}
+          />
           <QuickAction
             icon="medical-information"
             label="Mis recetas"

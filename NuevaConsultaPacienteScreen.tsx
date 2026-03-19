@@ -316,15 +316,16 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
     return DefaultAvatar;
   }, [user]);
 
-  const filteredSpecialties = useMemo(() => {
-    const q = normalizeText(searchText);
-    if (!q) return specialtyList;
-    return specialtyList.filter((item) => {
-      const name = normalizeText(item.label);
-      const desc = normalizeText(item.description);
-      return name.includes(q) || desc.includes(q);
-    });
-  }, [searchText, specialtyList]);
+  const specialtyList = [
+    { icon: 'heart-outline', label: 'Cardiologia', description: 'Corazon y sistema circulatorio' },
+    { icon: 'baby-face-outline', label: 'Pediatria', description: 'Atencion integral para ni�os' },
+    { icon: 'brain', label: 'Neurologia', description: 'Cerebro y sistema nervioso' },
+    { icon: 'face-man-outline', label: 'Dermatologia', description: 'Cuidado de la piel y cabello' },
+    { icon: 'stethoscope', label: 'Medicina General', description: 'Atencion primaria inicial' },
+    { icon: 'eye-outline', label: 'Oftalmologia', description: 'Salud visual y ocular' },
+    { icon: 'food-apple-outline', label: 'Nutricion', description: 'Dieta y bienestar alimenticio' },
+    { icon: 'pill', label: 'Endocrinologia', description: 'Hormonas y metabolismo' },
+  ];
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
@@ -344,7 +345,7 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
         await SecureStore.deleteItemAsync(LEGACY_USER_STORAGE_KEY);
         await SecureStore.deleteItemAsync(STORAGE_KEY);
       }
-    } catch {}
+    } catch { }
 
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
@@ -352,15 +353,6 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
   const onSelectSpecialty = (label: string) => {
     navigation.navigate('EspecialistasPorEspecialidad', { specialty: label });
   };
-
-  if (loadingUser) {
-    return (
-      <View style={styles.loaderWrap}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loaderText}>Cargando informacion...</Text>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -407,7 +399,10 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
               <Text style={styles.menuText}>{t('menu.videocall')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteChat')}
+            >
               <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.chat')}</Text>
             </TouchableOpacity>

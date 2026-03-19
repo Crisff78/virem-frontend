@@ -22,7 +22,7 @@ import { RootStackParamList } from './navigation/types';
 import { apiUrl, BACKEND_URL } from './config/backend';
 import { isValidEmail } from './utils/validation';
 
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const MEDICO_CACHE_BY_EMAIL_KEY = 'medicoProfileByEmail';

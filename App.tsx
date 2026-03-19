@@ -2,6 +2,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import * as Linking from "expo-linking";
 import React from "react";
+import { Platform } from "react-native";
 
 import EstablecerNuevaContrasenaScreen from "./EstablecerNuevaContrasenaScreen";
 import LoginScreen from "./LoginScreen";
@@ -26,13 +27,19 @@ import PacienteNotificacionesScreen from "./PacienteNotificacionesScreen";
 import PacienteConfiguracionScreen from "./PacienteConfiguracionScreen";
 import PacienteCambiarContrasenaScreen from "./PacienteCambiarContrasenaScreen";
 import PacienteHistorialSesionesScreen from "./PacienteHistorialSesionesScreen";
+import PacienteChatScreen from "./PacienteChatScreen";
 import { LanguageProvider } from "./localization/LanguageContext";
 
 import { RootStackParamList } from "./navigation/types";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const linkingPrefixes = [Linking.createURL("/")];
+if (Platform.OS === "web" && typeof window !== "undefined") {
+  linkingPrefixes.push(window.location.origin);
+}
+
 const linking = {
-  prefixes: [Linking.createURL("/")],
+  prefixes: linkingPrefixes,
   config: {
     screens: {
       SeleccionPerfil: "",
@@ -45,6 +52,7 @@ const linking = {
       RegistroCredenciales: "registro-credenciales",
       RegistroCredencialesMedico: "registro-credenciales-medico",
       DashboardPaciente: "dashboard-paciente",
+      PacienteChat: "paciente-chat",
       PacienteRecetasDocumentos: "paciente-recetas-documentos",
       PacientePerfil: "paciente-perfil",
       NuevaConsultaPaciente: "nueva-consulta",
@@ -67,6 +75,7 @@ const App: React.FC = () => {
           screenOptions={{
             headerShown: false,
             gestureEnabled: false,
+            animation: "none",
           }}
         >
           <Stack.Screen name="SeleccionPerfil" component={SeleccionPerfil} />
@@ -87,6 +96,7 @@ const App: React.FC = () => {
 
         {/* ✅ Dashboard Paciente */}
         <Stack.Screen name="DashboardPaciente" component={DashboardPacienteScreen} />
+        <Stack.Screen name="PacienteChat" component={PacienteChatScreen} />
         <Stack.Screen
           name="PacienteNotificaciones"
           component={PacienteNotificacionesScreen}

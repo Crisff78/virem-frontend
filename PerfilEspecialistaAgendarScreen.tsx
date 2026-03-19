@@ -17,7 +17,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 
 import { useLanguage } from './localization/LanguageContext';
 import type { RootStackParamList } from './navigation/types';
@@ -502,7 +502,6 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
       </View>
     );
   }
-
   return (
     <View style={styles.container}>
       <View style={styles.sidebar}>
@@ -1000,6 +999,7 @@ const styles = StyleSheet.create({
 });
 
 export default PerfilEspecialistaAgendarScreen;
+
 
 
 
