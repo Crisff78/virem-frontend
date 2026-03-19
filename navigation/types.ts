@@ -54,7 +54,14 @@ export type RootStackParamList = {
 
   // ✅ NUEVA PANTALLA
   DashboardPaciente: undefined;
-  PacienteChat: undefined;
+  PacienteCitas: undefined;
+  PacienteChat:
+    | {
+        doctorId?: string;
+        doctorName?: string;
+        doctorAvatarUrl?: string | null;
+      }
+    | undefined;
   PacienteNotificaciones: undefined;
   PacienteRecetasDocumentos: undefined;
   PacientePerfil: undefined;
@@ -63,10 +70,10 @@ export type RootStackParamList = {
   PacienteHistorialSesiones: undefined;
   NuevaConsultaPaciente: undefined;
   SalaEsperaVirtualPaciente:
-  | {
-    citaId?: string;
-  }
-  | undefined;
+    | {
+        citaId?: string;
+      }
+    | undefined;
   EspecialistasPorEspecialidad: { specialty: string };
   PerfilEspecialistaAgendar: {
     specialty: string;

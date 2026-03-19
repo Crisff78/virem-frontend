@@ -17,8 +17,7 @@ import {
 import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
-import type { RouteProp } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './navigation/types';
 import { apiUrl } from './config/backend';
@@ -62,6 +61,19 @@ const sanitizeFotoUrl = (value: unknown) => {
   if (!clean) return '';
   if (clean.toLowerCase().startsWith('blob:')) return '';
   return clean;
+};
+
+const extractUserId = (value: unknown) => {
+  const source = (value || {}) as Record<string, unknown>;
+  return normalizeString(source.usuarioid || source.id);
+};
+
+const resolveAvatarSource = (value: unknown): ImageSourcePropType => {
+  const clean = sanitizeFotoUrl(value);
+  if (clean) {
+    return { uri: clean };
+  }
+  return DefaultAvatar;
 };
 
 const getAuthToken = async (): Promise<string> => {
@@ -154,6 +166,7 @@ type CitaItem = {
     medicoid?: string;
     nombreCompleto?: string;
     especialidad?: string;
+    fotoUrl?: string | null;
   };
 };
 
@@ -197,8 +210,6 @@ type NotificationItem = {
   color: string;
   unread: boolean;
 };
-
-type DashboardSection = 'home' | 'appointments';
 
 /* ===================== COMPONENTES ===================== */
 const QuickAction: React.FC<QuickActionProps> = ({ icon, label, color, bg, onPress }) => (
@@ -277,20 +288,8 @@ const DoctorCard: React.FC<DoctorCardProps> = ({ name, spec, avatar, onReserve }
 /* ===================== PANTALLA ===================== */
 const DashboardPacienteScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const route = useRoute<RouteProp<RootStackParamList, 'DashboardPaciente'>>();
   const { t, tx } = useLanguage();
-  const initialUser = useMemo(() => {
-    if (Platform.OS !== 'web') return null;
-    try {
-      return (
-        parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY)) ||
-        parseUser(localStorage.getItem(STORAGE_KEY))
-      );
-    } catch {
-      return null;
-    }
-  }, []);
-  const [user, setUser] = useState<User | null>(initialUser);
+  const [user, setUser] = useState<User | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -332,6 +331,9 @@ const DashboardPacienteScreen: React.FC = () => {
       unread: false,
     },
   ]);
+  const [upcomingCitas, setUpcomingCitas] = useState<CitaItem[]>([]);
+  const [historyCitas, setHistoryCitas] = useState<CitaItem[]>([]);
+  const [loadingCitas, setLoadingCitas] = useState(false);
   const [prepOpen, setPrepOpen] = useState(false);
   const [prepItems, setPrepItems] = useState([false, false, false, false]);
   const [testProgress, setTestProgress] = useState(0);
@@ -339,14 +341,7 @@ const DashboardPacienteScreen: React.FC = () => {
   const [testStatus, setTestStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [testStatusText, setTestStatusText] = useState('Aún no se ha realizado la prueba.');
   const [chatReply, setChatReply] = useState('');
-  const [activeSection, setActiveSection] = useState<DashboardSection>('home');
   const chatAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (route.params?.initialSection) {
-      setActiveSection(route.params.initialSection);
-    }
-  }, [route.params?.initialSection]);
 
   // Cargar y sincronizar usuario paciente desde storage + backend.
   const loadUser = useCallback(async () => {
@@ -357,13 +352,13 @@ const DashboardPacienteScreen: React.FC = () => {
           ? localStorage.getItem(LEGACY_USER_STORAGE_KEY)
           : await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY);
       const rawUserFromAsync = await AsyncStorage.getItem(STORAGE_KEY);
-      let sessionUser = parseUser(rawUserFromStorage) || parseUser(rawUserFromAsync);
+      let sessionUser = ensurePatientSessionUser(parseUser(rawUserFromStorage) || parseUser(rawUserFromAsync));
 
       const rawTokenFromStorage =
         Platform.OS === 'web'
           ? localStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY)
           : (await SecureStore.getItemAsync(AUTH_TOKEN_KEY)) ||
-          (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
+            (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
       const rawTokenFromAsync = await AsyncStorage.getItem(LEGACY_TOKEN_KEY);
       const authToken = normalizeString(rawTokenFromStorage || rawTokenFromAsync);
 
@@ -386,15 +381,15 @@ const DashboardPacienteScreen: React.FC = () => {
               ...profileUser,
               nombres: normalizeString(
                 (profileUser as any)?.nombres ||
-                safeSessionUser?.nombres ||
-                safeSessionUser?.nombre ||
-                (profileUser as any)?.nombre
+                  safeSessionUser?.nombres ||
+                  safeSessionUser?.nombre ||
+                  (profileUser as any)?.nombre
               ),
               apellidos: normalizeString(
                 (profileUser as any)?.apellidos ||
-                safeSessionUser?.apellidos ||
-                safeSessionUser?.apellido ||
-                (profileUser as any)?.apellido
+                  safeSessionUser?.apellidos ||
+                  safeSessionUser?.apellido ||
+                  (profileUser as any)?.apellido
               ),
               nombre: normalizeString(
                 (profileUser as any)?.nombre || (profileUser as any)?.nombres || safeSessionUser?.nombre
@@ -418,7 +413,7 @@ const DashboardPacienteScreen: React.FC = () => {
             try {
               await AsyncStorage.setItem(STORAGE_KEY, rawNextUser);
               await AsyncStorage.setItem('user', rawNextUser);
-            } catch { }
+            } catch {}
 
             try {
               if (Platform.OS === 'web') {
@@ -427,7 +422,7 @@ const DashboardPacienteScreen: React.FC = () => {
               } else {
                 await SecureStore.setItemAsync(LEGACY_USER_STORAGE_KEY, rawNextUser);
               }
-            } catch { }
+            } catch {}
           } else {
             const response = await fetch(apiUrl('/api/auth/me'), {
               method: 'GET',
@@ -471,7 +466,7 @@ const DashboardPacienteScreen: React.FC = () => {
                 try {
                   await AsyncStorage.setItem(STORAGE_KEY, rawNextUser);
                   await AsyncStorage.setItem('user', rawNextUser);
-                } catch { }
+                } catch {}
 
                 try {
                   if (Platform.OS === 'web') {
@@ -480,7 +475,7 @@ const DashboardPacienteScreen: React.FC = () => {
                   } else {
                     await SecureStore.setItemAsync(LEGACY_USER_STORAGE_KEY, rawNextUser);
                   }
-                } catch { }
+                } catch {}
               } else {
                 sessionUser = null;
               }
@@ -511,7 +506,7 @@ const DashboardPacienteScreen: React.FC = () => {
             upcomingPayload?.success &&
             Array.isArray(upcomingPayload?.citas)
           ) {
-            setUpcomingCitas(upcomingPayload.citas as CitaItem[]);
+            setUpcomingCitas(sortCitasByStartAsc(upcomingPayload.citas as CitaItem[]));
           } else {
             setUpcomingCitas([]);
           }
@@ -539,7 +534,7 @@ const DashboardPacienteScreen: React.FC = () => {
 
       setUser(sessionUser);
     } catch {
-      // Si falla la sincronización remota, mantenemos el estado actual cacheado.
+      setUser(null);
     } finally {
       setLoadingUser(false);
     }
@@ -571,9 +566,12 @@ const DashboardPacienteScreen: React.FC = () => {
     return DefaultAvatar;
   }, [user]);
 
-  // Doctores placeholder (esto no depende del usuario)
-  const Doctor1: ImageSourcePropType = { uri: 'https://i.pravatar.cc/150?img=12' };
-  const Doctor2: ImageSourcePropType = { uri: 'https://i.pravatar.cc/150?img=32' };
+  const getDoctorAvatar = useCallback(
+    (cita: CitaItem | null | undefined): ImageSourcePropType =>
+      resolveAvatarSource(cita?.medico?.fotoUrl),
+    []
+  );
+
   const primaryCita = upcomingCitas.length ? upcomingCitas[0] : null;
   const pendingCitas = useMemo(() => {
     if (!upcomingCitas.length) return [];
@@ -581,14 +579,15 @@ const DashboardPacienteScreen: React.FC = () => {
   }, [upcomingCitas, primaryCita]);
   const historyRows = useMemo(() => historyCitas.slice(0, 2), [historyCitas]);
   const frequentDoctors = useMemo(() => {
-    const order: { name: string; spec: string }[] = [];
+    const order: { name: string; spec: string; fotoUrl: string }[] = [];
     const seen = new Set<string>();
     for (const cita of [...upcomingCitas, ...historyCitas]) {
       const name = normalizeString(cita?.medico?.nombreCompleto || '');
       const spec = normalizeString(cita?.medico?.especialidad || 'Medicina General');
+      const fotoUrl = sanitizeFotoUrl(cita?.medico?.fotoUrl);
       if (!name || seen.has(name.toLowerCase())) continue;
       seen.add(name.toLowerCase());
-      order.push({ name, spec: spec || 'Medicina General' });
+      order.push({ name, spec: spec || 'Medicina General', fotoUrl });
       if (order.length >= 2) break;
     }
     return order;
@@ -596,6 +595,7 @@ const DashboardPacienteScreen: React.FC = () => {
 
   const primaryDoctorName = normalizeString(primaryCita?.medico?.nombreCompleto || '');
   const primaryDoctorSpec = normalizeString(primaryCita?.medico?.especialidad || 'Medicina General');
+  const primaryDoctorAvatar = useMemo(() => getDoctorAvatar(primaryCita), [getDoctorAvatar, primaryCita]);
   const primaryDateLabel = formatDateTime(primaryCita?.fechaHoraInicio || null);
   const primaryRelative = formatRelativeIn(primaryCita?.fechaHoraInicio || null);
 
@@ -612,8 +612,25 @@ const DashboardPacienteScreen: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+    await AsyncStorage.removeItem(LEGACY_TOKEN_KEY);
     await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(LEGACY_TOKEN_KEY);
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+      } else {
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_USER_STORAGE_KEY);
+        await SecureStore.deleteItemAsync(STORAGE_KEY);
+      }
+    } catch {}
+
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
@@ -622,7 +639,7 @@ const DashboardPacienteScreen: React.FC = () => {
       Alert.alert('Videollamada', 'No tienes citas activas para entrar ahora.');
       return;
     }
-    navigation.navigate('SalaEsperaVirtualPaciente');
+    navigation.navigate('SalaEsperaVirtualPaciente', { citaId: primaryCita.citaid });
   };
 
   const handleSeePreparations = () => {
@@ -722,50 +739,6 @@ const DashboardPacienteScreen: React.FC = () => {
   };
 
   const unreadNotifications = notifications.filter((n) => n.unread).length;
-  const appointmentItems = [
-    {
-      id: 'a1',
-      status: 'CONFIRMADA',
-      mode: 'Videollamada',
-      modeColor: '#137fec',
-      doctor: 'Dr. Alejandro Martínez',
-      specialty: 'Cardiología Clínica',
-      date: 'Jueves, 24 Oct',
-      time: '10:30 AM (En 45 min)',
-      avatar: Doctor1,
-      primaryButton: 'Entrar',
-      primaryButtonStyle: 'blue' as const,
-      secondaryButton: 'Detalles',
-    },
-    {
-      id: 'a2',
-      status: 'CONFIRMADA',
-      mode: 'Presencial',
-      modeColor: '#f97316',
-      doctor: 'Dra. Elena Rodríguez',
-      specialty: 'Dermatología',
-      date: 'Lunes, 28 Oct',
-      time: '04:00 PM',
-      avatar: Doctor2,
-      primaryButton: 'Reagendar',
-      primaryButtonStyle: 'light' as const,
-      secondaryButton: 'Detalles',
-    },
-    {
-      id: 'a3',
-      status: 'PENDIENTE DE PAGO',
-      mode: 'Videollamada',
-      modeColor: '#137fec',
-      doctor: 'Dr. Ricardo Vaca',
-      specialty: 'Medicina General',
-      date: 'Miércoles, 30 Oct',
-      time: '09:00 AM',
-      avatar: Doctor1,
-      primaryButton: 'Pagar Cita',
-      primaryButtonStyle: 'dark' as const,
-      secondaryButton: 'Cancelar',
-    },
-  ];
 
   const markAllNotificationsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
@@ -801,7 +774,10 @@ const DashboardPacienteScreen: React.FC = () => {
 
           {/* Menú */}
           <View style={styles.menu}>
-            <TouchableOpacity style={[styles.menuItemRow, styles.menuItemActive]}>
+            <TouchableOpacity
+              style={[styles.menuItemRow, styles.menuItemActive]}
+              onPress={() => navigation.navigate('DashboardPaciente')}
+            >
               <MaterialIcons name="grid-view" size={20} color={colors.primary} />
               <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.home')}</Text>
             </TouchableOpacity>
@@ -814,7 +790,10 @@ const DashboardPacienteScreen: React.FC = () => {
               <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteCitas')}
+            >
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
@@ -870,311 +849,246 @@ const DashboardPacienteScreen: React.FC = () => {
 
       {/* ===================== MAIN ===================== */}
       <ScrollView style={styles.main} contentContainerStyle={{ paddingBottom: 30 }}>
-        {activeSection === 'home' ? (
-          <>
-            <View style={styles.header}>
-              <View style={styles.searchBox}>
-                <MaterialIcons name="search" size={20} color={colors.muted} />
-                <TextInput
-                  placeholder="Busca un médico para consulta online"
-                  placeholderTextColor="#8aa7bf"
-                  style={styles.searchInput}
-                />
-              </View>
+        <View style={styles.header}>
+          <View style={styles.searchBox}>
+            <MaterialIcons name="search" size={20} color={colors.muted} />
+            <TextInput
+              placeholder="Busca un médico para consulta online"
+              placeholderTextColor="#8aa7bf"
+              style={styles.searchInput}
+            />
+          </View>
 
-              <TouchableOpacity style={styles.notifBtn} onPress={() => setNotificationsOpen(true)}>
-                <MaterialIcons name="notifications" size={22} color={colors.dark} />
-                {unreadNotifications > 0 ? <View style={styles.notifDot} /> : null}
-              </TouchableOpacity>
+          <TouchableOpacity style={styles.notifBtn} onPress={() => setNotificationsOpen(true)}>
+            <MaterialIcons name="notifications" size={22} color={colors.dark} />
+            {unreadNotifications > 0 ? <View style={styles.notifDot} /> : null}
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.title}>Hola, {fullName.split(' ')[0] || 'Paciente'}</Text>
+        <Text style={styles.subtitle}>
+          {loadingCitas
+            ? 'Cargando tus citas...'
+            : primaryCita
+              ? `Tu proxima cita es con ${primaryDoctorName || 'tu especialista'}.`
+              : 'Aun no tienes citas programadas. Agenda tu primera consulta.'}
+        </Text>
+
+        {/* Card grande */}
+        <View style={styles.bigCard}>
+          <View style={styles.bigCardLeft}>
+            <View style={styles.liveRow}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>En directo ahora</Text>
             </View>
 
-            <Text style={styles.title}>Hola, {fullName.split(' ')[0] || 'Paciente'}</Text>
-            <Text style={styles.subtitle}>
-              Hoy tienes una cita programada con el equipo de cardiología.
+            <Text style={styles.bigCardTitle}>
+              {primaryCita
+                ? `Proxima videoconsulta: ${primaryDoctorName || 'Especialista'}`
+                : 'No tienes videoconsultas pendientes'}
             </Text>
 
-            {/* Card grande */}
-            <View style={styles.bigCard}>
-              <View style={styles.bigCardLeft}>
-                <View style={styles.liveRow}>
-                  <View style={styles.liveDot} />
-                  <Text style={styles.liveText}>En directo ahora</Text>
-                </View>
+            <Text style={styles.bigCardSub}>
+              {primaryCita
+                ? `${primaryDoctorSpec || 'Medicina General'} · ${primaryDateLabel} (${primaryRelative})`
+                : 'Selecciona "Nueva consulta" para agendar una cita.'}
+            </Text>
 
-                <Text style={styles.bigCardTitle}>
-                  Próxima Videoconsulta: Dr. Alejandro García
+            <View style={styles.bigCardActions}>
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={primaryCita ? handleJoinVideoCall : () => navigation.navigate('NuevaConsultaPaciente')}
+              >
+                <MaterialIcons name="videocam" size={18} color="#fff" />
+                <Text style={styles.primaryBtnText}>
+                  {primaryCita ? 'Entrar a Videollamada' : 'Ir a Nueva Consulta'}
                 </Text>
-
-                <Text style={styles.bigCardSub}>
-                  Cardiología · Hoy, 16:30 PM (en 15 minutos)
-                </Text>
-
-                <View style={styles.bigCardActions}>
-                  <TouchableOpacity style={styles.primaryBtn} onPress={handleJoinVideoCall}>
-                    <MaterialIcons name="videocam" size={18} color="#fff" />
-                    <Text style={styles.primaryBtnText}>Entrar a Videollamada</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.secondaryBtn} onPress={handleSeePreparations}>
-                    <Text style={styles.secondaryBtnText}>Ver preparativos</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.bigCardRight}>
-                <Image source={primaryDoctorAvatar} style={styles.bigCardImage} />
-              </View>
-            </View>
-
-            <Text style={styles.sectionTitle}>Acciones rápidas</Text>
-            <View style={styles.quickGrid}>
-              <QuickAction
-                icon="add-circle"
-                label="Nueva consulta"
-                color={colors.primary}
-                bg="rgba(19,127,236,0.12)"
-                onPress={() => navigation.navigate('NuevaConsultaPaciente')}
-              />
-              <QuickAction
-                icon="calendar-month"
-                label="Agendar cita"
-                color="#f97316"
-                bg="#fff7ed"
-                onPress={() => setActiveSection('appointments')}
-              />
-              <QuickAction
-                icon="chat"
-                label="Consultar Chat"
-                color="#14b8a6"
-                bg="#f0fdfa"
-                onPress={() => navigation.navigate('PacienteChat')}
-              />
-              <QuickAction
-                icon="medical-information"
-                label="Mis recetas"
-                color="#a855f7"
-                bg="#faf5ff"
-                onPress={() => navigation.navigate('PacienteRecetasDocumentos')}
-              />
-            </View>
-
-            <View style={styles.twoCols}>
-              <View style={styles.colLeft}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.sectionTitle}>Citas pendientes</Text>
-                  <TouchableOpacity>
-                    <Text style={styles.link}>Ver todas</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {pendingCitas.length ? (
-                  pendingCitas.map((cita, index) => (
-                    <AppointmentCard
-                      key={cita.citaid || `${cita.fechaHoraInicio}-${index}`}
-                      doctor={normalizeString(cita?.medico?.nombreCompleto || 'Especialista')}
-                      detail={`${normalizeString(cita?.medico?.especialidad || 'Medicina General')} · ${formatDateTime(cita.fechaHoraInicio)}`}
-                      avatar={index % 2 === 0 ? Doctor2 : Doctor1}
-                      simple={index % 2 !== 0}
-                    />
-                  ))
-                ) : (
-                  <View style={styles.emptyStateCard}>
-                    <Text style={styles.emptyStateText}>
-                      {loadingCitas
-                        ? 'Cargando citas pendientes...'
-                        : 'No tienes citas pendientes. Agenda una nueva consulta.'}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.colRight} />
-            </View>
-
-            <View style={styles.twoCols}>
-              <View style={styles.colLeft}>
-                <Text style={styles.sectionTitle}>Recetas y Documentos</Text>
-                <View style={styles.listCard}>
-                  {historyRows.length ? (
-                    historyRows.map((cita, index) => (
-                      <DocRow
-                        key={cita.citaid || `${cita.fechaHoraInicio}-${index}`}
-                        icon={index % 2 === 0 ? 'history' : 'description'}
-                        title={`${normalizeString(cita?.medico?.especialidad || 'Consulta')} · ${normalizeString(cita.estado || 'Completada')}`}
-                        sub={`${normalizeString(cita?.medico?.nombreCompleto || 'Especialista')} · ${formatDateTime(cita.fechaHoraInicio)}`}
-                      />
-                    ))
-                  ) : (
-                    <View style={styles.emptyStateCard}>
-                      <Text style={styles.emptyStateText}>
-                        {loadingCitas ? 'Cargando historial...' : 'Aun no hay consultas registradas.'}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              <View style={styles.colRight}>
-                <Text style={styles.sectionTitle}>Doctores frecuentes</Text>
-                <View style={styles.doctorsGrid}>
-                  {frequentDoctors.length ? (
-                    frequentDoctors.map((item, index) => (
-                      <DoctorCard
-                        key={`${item.name}-${index}`}
-                        name={item.name}
-                        spec={item.spec}
-                        avatar={index % 2 === 0 ? Doctor1 : Doctor2}
-                      />
-                    ))
-                  ) : (
-                    <View style={styles.emptyStateCard}>
-                      <Text style={styles.emptyStateText}>Aun no hay doctores frecuentes.</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryHead}>
-                <View style={styles.summaryIconBox}>
-                  <MaterialCommunityIcons name="history" size={18} color="#fff" />
-                </View>
-                <Text style={styles.summaryTitle}>Resumen de última consulta</Text>
-              </View>
-
-              <View style={styles.summaryInner}>
-                <View style={styles.rowBetween}>
-                  <View>
-                    <Text style={styles.summaryLabel}>Diagnóstico Principal</Text>
-                    <Text style={styles.summaryDiag}>Gripe común estacional</Text>
-                  </View>
-                  <Text style={styles.summaryDate}>12 Oct 2023</Text>
-                </View>
-
-                <Text style={styles.summaryText}>
-                  Paciente presenta síntomas de resfriado leve. Se recomienda descanso, hidratación constante
-                  y el uso de analgésicos según receta adjunta. Revisión en 5 días si los síntomas persisten.
-                </Text>
-              </View>
-            </View>
-          </>
-        ) : (
-          <>
-            <View style={styles.appointmentsHeaderRow}>
-              <View>
-                <Text style={styles.appointmentsTitle}>Mis Citas</Text>
-                <Text style={styles.appointmentsSubtitle}>
-                  Gestiona tus consultas médicas programadas y pasadas.
-                </Text>
-              </View>
+              </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.newAppointmentBtn}
-                onPress={() => navigation.navigate('NuevaConsultaPaciente')}
+                style={styles.secondaryBtn}
+                onPress={primaryCita ? handleSeePreparations : () => navigation.navigate('NuevaConsultaPaciente')}
               >
-                <MaterialIcons name="add" size={16} color="#fff" />
-                <Text style={styles.newAppointmentBtnText}>Nueva Cita</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.appointmentsTabs}>
-              <TouchableOpacity style={[styles.appointmentsTab, styles.appointmentsTabActive]}>
-                <Text style={[styles.appointmentsTabText, styles.appointmentsTabTextActive]}>
-                  Próximas
+                <Text style={styles.secondaryBtnText}>
+                  {primaryCita ? 'Ver preparativos' : 'Agendar ahora'}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.appointmentsTab}>
-                <Text style={styles.appointmentsTabText}>Historial</Text>
+            </View>
+          </View>
+
+          <View style={styles.bigCardRight}>
+            <Image source={primaryDoctorAvatar} style={styles.bigCardImage} />
+          </View>
+        </View>
+
+        <Text style={styles.sectionTitle}>Acciones rápidas</Text>
+        <View style={styles.quickGrid}>
+          <QuickAction
+            icon="add-circle"
+            label="Nueva consulta"
+            color={colors.primary}
+            bg="rgba(19,127,236,0.12)"
+            onPress={() => navigation.navigate('NuevaConsultaPaciente')}
+          />
+          <QuickAction
+            icon="calendar-month"
+            label="Agendar cita"
+            color="#f97316"
+            bg="#fff7ed"
+            onPress={() => navigation.navigate('NuevaConsultaPaciente')}
+          />
+          <QuickAction
+            icon="chat"
+            label="Consultar Chat"
+            color="#14b8a6"
+            bg="#f0fdfa"
+            onPress={() => navigation.navigate('PacienteChat')}
+          />
+          <QuickAction
+            icon="medical-information"
+            label="Mis recetas"
+            color="#a855f7"
+            bg="#faf5ff"
+            onPress={() => navigation.navigate('PacienteRecetasDocumentos')}
+          />
+        </View>
+
+        <View style={styles.twoCols}>
+          <View style={styles.colLeft}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.sectionTitle}>Citas pendientes</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('PacienteCitas')}>
+                <Text style={styles.link}>Ver todas</Text>
               </TouchableOpacity>
             </View>
 
-            {appointmentItems.map((item) => (
-              <View key={item.id} style={styles.appointmentItemCard}>
-                <Image source={item.avatar} style={styles.appointmentItemAvatar} />
-
-                <View style={styles.appointmentItemBody}>
-                  <View style={styles.appointmentItemTags}>
-                    <Text style={styles.appointmentStatusTag}>{item.status}</Text>
-                    <View style={styles.appointmentModeTag}>
-                      <MaterialIcons
-                        name={item.mode === 'Presencial' ? 'person-pin-circle' : 'videocam'}
-                        size={12}
-                        color={item.modeColor}
-                      />
-                      <Text style={[styles.appointmentModeTagText, { color: item.modeColor }]}>
-                        {item.mode}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text style={styles.appointmentDoctor}>{item.doctor}</Text>
-                  <Text style={styles.appointmentSpecialty}>{item.specialty}</Text>
-                </View>
-
-                <View style={styles.appointmentDateWrap}>
-                  <View style={styles.appointmentDateRow}>
-                    <MaterialIcons name="calendar-today" size={14} color={colors.primary} />
-                    <Text style={styles.appointmentDateText}>{item.date}</Text>
-                  </View>
-                  <View style={styles.appointmentDateRow}>
-                    <MaterialIcons name="access-time" size={14} color={colors.primary} />
-                    <Text style={styles.appointmentTimeText}>{item.time}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.appointmentActions}>
-                  <TouchableOpacity
-                    style={[
-                      styles.appointmentActionBtn,
-                      item.primaryButtonStyle === 'blue'
-                        ? styles.appointmentActionBtnBlue
-                        : item.primaryButtonStyle === 'dark'
-                          ? styles.appointmentActionBtnDark
-                          : styles.appointmentActionBtnLight,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.appointmentActionBtnText,
-                        item.primaryButtonStyle === 'light' && styles.appointmentActionBtnTextDark,
-                      ]}
-                    >
-                      {item.primaryButton}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.appointmentActionBtn, styles.appointmentActionBtnLight]}
-                  >
-                    <Text
-                      style={[
-                        styles.appointmentActionBtnText,
-                        styles.appointmentActionBtnTextDark,
-                      ]}
-                    >
-                      {item.secondaryButton}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+            {pendingCitas.length ? (
+              pendingCitas.map((cita, index) => (
+                <AppointmentCard
+                  key={cita.citaid || `${cita.fechaHoraInicio}-${index}`}
+                  doctor={normalizeString(cita?.medico?.nombreCompleto || 'Especialista')}
+                  detail={`${normalizeString(cita?.medico?.especialidad || 'Medicina General')} · ${formatDateTime(cita.fechaHoraInicio)}`}
+                  avatar={getDoctorAvatar(cita)}
+                  simple={index % 2 !== 0}
+                  onPostpone={() =>
+                    Alert.alert(
+                      'Posponer cita',
+                      `Se movera 24 horas hacia adelante.\nCita actual: ${formatDateTime(cita.fechaHoraInicio)}`,
+                      [
+                        { text: 'Cancelar', style: 'cancel' },
+                        { text: 'Posponer', onPress: () => handlePostponeCita(cita) },
+                      ]
+                    )
+                  }
+                  onDetails={() =>
+                    Alert.alert(
+                      'Detalle de cita',
+                      `${normalizeString(cita?.medico?.nombreCompleto || 'Especialista')}\n${normalizeString(
+                        cita?.medico?.especialidad || 'Medicina General'
+                      )}\n${formatDateTime(cita.fechaHoraInicio)}`
+                    )
+                  }
+                />
+              ))
+            ) : (
+              <View style={styles.emptyStateCard}>
+                <Text style={styles.emptyStateText}>
+                  {loadingCitas
+                    ? 'Cargando citas pendientes...'
+                    : 'No tienes citas pendientes. Agenda una nueva consulta.'}
+                </Text>
               </View>
-            ))}
+            )}
+          </View>
 
-            <View style={styles.urgentCard}>
-              <View style={styles.urgentLeft}>
-                <MaterialIcons name="info" size={20} color={colors.primary} />
-                <View>
-                  <Text style={styles.urgentTitle}>¿Necesitas una consulta urgente?</Text>
-                  <Text style={styles.urgentSubtitle}>
-                    Nuestro servicio de Urgencias Virtuales está disponible las 24 horas.
+          <View style={styles.colRight} />
+        </View>
+
+        <View style={styles.twoCols}>
+          <View style={styles.colLeft}>
+            <Text style={styles.sectionTitle}>Historial reciente de consultas</Text>
+            <View style={styles.listCard}>
+              {historyRows.length ? (
+                historyRows.map((cita, index) => (
+                  <DocRow
+                    key={cita.citaid || `${cita.fechaHoraInicio}-${index}`}
+                    icon={index % 2 === 0 ? 'history' : 'description'}
+                    title={`${normalizeString(cita?.medico?.especialidad || 'Consulta')} · ${normalizeString(cita.estado || 'Completada')}`}
+                    sub={`${normalizeString(cita?.medico?.nombreCompleto || 'Especialista')} · ${formatDateTime(cita.fechaHoraInicio)}`}
+                    onDownload={() =>
+                      Alert.alert(
+                        'Documento clinico',
+                        `Puedes descargar documentos completos en "Mis recetas".\nConsulta: ${formatDateTime(
+                          cita.fechaHoraInicio
+                        )}`
+                      )
+                    }
+                  />
+                ))
+              ) : (
+                <View style={styles.emptyStateCard}>
+                  <Text style={styles.emptyStateText}>
+                    {loadingCitas ? 'Cargando historial...' : 'Aun no hay consultas registradas.'}
                   </Text>
                 </View>
-              </View>
-              <TouchableOpacity>
-                <Text style={styles.urgentLink}>Ver ahora</Text>
-              </TouchableOpacity>
+              )}
             </View>
-          </>
-        )}
+          </View>
+
+          <View style={styles.colRight}>
+            <Text style={styles.sectionTitle}>Doctores frecuentes</Text>
+            <View style={styles.doctorsGrid}>
+              {frequentDoctors.length ? (
+                frequentDoctors.map((item, index) => (
+                  <DoctorCard
+                    key={`${item.name}-${index}`}
+                    name={item.name}
+                    spec={item.spec}
+                    avatar={resolveAvatarSource(item.fotoUrl)}
+                    onReserve={() =>
+                      navigation.navigate('EspecialistasPorEspecialidad', { specialty: item.spec })
+                    }
+                  />
+                ))
+              ) : (
+                <View style={styles.emptyStateCard}>
+                  <Text style={styles.emptyStateText}>Aun no hay doctores frecuentes.</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryHead}>
+            <View style={styles.summaryIconBox}>
+              <MaterialCommunityIcons name="history" size={18} color="#fff" />
+            </View>
+            <Text style={styles.summaryTitle}>Resumen de ultima consulta</Text>
+          </View>
+
+          <View style={styles.summaryInner}>
+            <View style={styles.rowBetween}>
+              <View>
+                <Text style={styles.summaryLabel}>Diagnóstico Principal</Text>
+                <Text style={styles.summaryDiag}>
+                  {historyCitas[0]
+                    ? normalizeString(historyCitas[0].nota || historyCitas[0].estado || 'Consulta completada')
+                    : 'Sin historial disponible'}
+                </Text>
+              </View>
+              <Text style={styles.summaryDate}>
+                {historyCitas[0] ? formatDateTime(historyCitas[0].fechaHoraInicio) : '--'}
+              </Text>
+            </View>
+
+            <Text style={styles.summaryText}>
+              {historyCitas[0]
+                ? `Ultimo estado registrado: ${normalizeString(historyCitas[0].estado || 'Completada')}.`
+                : 'Cuando completes una consulta, aqui veras un resumen clinico.'}
+            </Text>
+          </View>
+        </View>
       </ScrollView>
 
       {chatOpen ? (
@@ -1310,7 +1224,11 @@ const DashboardPacienteScreen: React.FC = () => {
             </View>
 
             <Text style={styles.prepTitle}>Prepárate para tu videollamada</Text>
-            <Text style={styles.prepSub}>Con el Dr. Alejandro García • Cardiología</Text>
+            <Text style={styles.prepSub}>
+              {primaryCita
+                ? `Con ${primaryDoctorName || 'tu especialista'} • ${primaryDoctorSpec || 'Medicina General'}`
+                : 'Con tu especialista asignado'}
+            </Text>
 
             <View style={styles.prepGrid}>
               <View style={styles.prepCard}>
@@ -1567,120 +1485,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '900', color: colors.dark, marginTop: 8 },
   subtitle: { fontSize: 14, color: colors.muted, marginTop: 6, marginBottom: 18, fontWeight: '600' },
 
-  appointmentsHeaderRow: {
-    marginTop: 4,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    flexWrap: 'wrap',
-  },
-  appointmentsTitle: { fontSize: 36, fontWeight: '900', color: colors.dark },
-  appointmentsSubtitle: { marginTop: 2, fontSize: 13, color: '#8aa7bf', fontWeight: '600' },
-  newAppointmentBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    shadowColor: colors.dark,
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  newAppointmentBtnText: { color: '#fff', fontSize: 12, fontWeight: '900' },
-  appointmentsTabs: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#dfeaf6',
-  },
-  appointmentsTab: {
-    paddingVertical: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  appointmentsTabActive: { borderBottomColor: colors.primary },
-  appointmentsTabText: { color: '#7f9ab2', fontSize: 13, fontWeight: '700' },
-  appointmentsTabTextActive: { color: colors.primary, fontWeight: '900' },
-  appointmentItemCard: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0eaf5',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    marginBottom: 12,
-    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
-    alignItems: Platform.OS === 'web' ? 'center' : 'flex-start',
-    gap: 12,
-  },
-  appointmentItemAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#f1f5f9',
-  },
-  appointmentItemBody: { flex: 1, minWidth: 180 },
-  appointmentItemTags: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  appointmentStatusTag: {
-    backgroundColor: '#eaf7ed',
-    color: '#1f9d4d',
-    fontSize: 9,
-    fontWeight: '900',
-    paddingVertical: 3,
-    paddingHorizontal: 6,
-    borderRadius: 999,
-  },
-  appointmentModeTag: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  appointmentModeTagText: { fontSize: 10, fontWeight: '800' },
-  appointmentDoctor: { marginTop: 6, color: colors.dark, fontWeight: '900', fontSize: 18 },
-  appointmentSpecialty: { marginTop: 2, color: colors.muted, fontSize: 15, fontWeight: '600' },
-  appointmentDateWrap: { minWidth: Platform.OS === 'web' ? 175 : 0, gap: 8 },
-  appointmentDateRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  appointmentDateText: { color: colors.dark, fontWeight: '800', fontSize: 14 },
-  appointmentTimeText: { color: '#7f9ab2', fontWeight: '700', fontSize: 13 },
-  appointmentActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginLeft: Platform.OS === 'web' ? 'auto' : 0,
-  },
-  appointmentActionBtn: {
-    borderRadius: 8,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-  },
-  appointmentActionBtnBlue: { backgroundColor: colors.primary },
-  appointmentActionBtnDark: { backgroundColor: '#21314d' },
-  appointmentActionBtnLight: { backgroundColor: '#f1f5f9' },
-  appointmentActionBtnText: { color: '#fff', fontWeight: '900', fontSize: 12 },
-  appointmentActionBtnTextDark: { color: '#516987' },
-  urgentCard: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#bcd6f1',
-    backgroundColor: '#eaf4ff',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-  urgentLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 220 },
-  urgentTitle: { color: colors.dark, fontSize: 15, fontWeight: '900' },
-  urgentSubtitle: { marginTop: 2, color: '#6d89a2', fontSize: 12, fontWeight: '600' },
-  urgentLink: { color: colors.primary, fontWeight: '900', fontSize: 13 },
-
   bigCard: {
     backgroundColor: '#fff',
     borderRadius: 24,
@@ -1903,6 +1707,15 @@ const styles = StyleSheet.create({
   notificationsButtonText: { color: '#fff', fontSize: 14, fontWeight: '900' },
 
   listCard: { backgroundColor: '#fff', borderRadius: 22, overflow: 'hidden', marginTop: 10, shadowColor: colors.dark, shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  emptyStateCard: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  emptyStateText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   docRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   docLeft: { flexDirection: 'row', gap: 12, alignItems: 'center', flex: 1 },
   docIconBox: { width: 44, height: 44, borderRadius: 16, backgroundColor: 'rgba(19,127,236,0.12)', alignItems: 'center', justifyContent: 'center' },

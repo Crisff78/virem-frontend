@@ -278,9 +278,12 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
               onPress={() => navigation.navigate('NuevaConsultaPaciente')}
             >
               <MaterialIcons name="person-search" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
+              <Text style={styles.menuText}>Buscar Médico</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteCitas')}
+            >
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
@@ -311,14 +314,6 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
             >
               <MaterialIcons name="account-circle" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.profile')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteConfiguracion')}
-            >
-              <MaterialIcons name="settings" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -353,13 +348,13 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.pageTitle}>
-          {tx({
-            es: 'Mis Recetas y Documentos',
-            en: 'My Prescriptions and Documents',
-            pt: 'Minhas Receitas e Documentos',
-          })}
-        </Text>
+          <Text style={styles.pageTitle}>
+            {tx({
+              es: 'Mis Recetas y Documentos',
+              en: 'My Prescriptions and Documents',
+              pt: 'Minhas Receitas e Documentos',
+            })}
+          </Text>
         <Text style={styles.pageSubtitle}>
           Accede y descarga tu historial médico organizado por categorías.
         </Text>

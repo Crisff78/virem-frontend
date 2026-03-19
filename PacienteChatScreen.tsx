@@ -1,5 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Image,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -327,11 +337,11 @@ const PacienteChatScreen: React.FC = () => {
       const raw = JSON.stringify(map);
       try {
         await AsyncStorage.setItem(chatStorageKey, raw);
-      } catch { }
+      } catch {}
       if (Platform.OS === 'web') {
         try {
           localStorage.setItem(chatStorageKey, raw);
-        } catch { }
+        } catch {}
       }
     },
     [chatStorageKey]
@@ -363,41 +373,45 @@ const PacienteChatScreen: React.FC = () => {
   );
 
   const messages = useMemo(() => {
-    if (selectedChatId === '2') {
-      return [
-        {
-          id: 'm4',
-          from: 'other',
-          text: 'Solicito revisiÃ³n del paciente #402.',
-          time: '9:35 AM',
-          dateLabel: 'Hoy, 9:35 AM',
-        },
-      ];
-    }
-    if (selectedChatId === '3') {
-      return [
-        {
-          id: 'm5',
-          from: 'other',
-          text: 'Gracias por la consulta y recomendaciones.',
-          time: '8:10 PM',
-          dateLabel: 'Ayer, 8:10 PM',
-        },
-      ];
-    }
-    if (selectedChatId === '4') {
-      return [
-        {
-          id: 'm6',
-          from: 'other',
-          text: 'Doctor, subÃ­ un nuevo reporte mÃ©dico al sistema.',
-          time: '3:45 PM',
-          dateLabel: 'Lunes, 3:45 PM',
-        },
-      ];
-    }
-    return initialMessages;
-  }, [selectedChatId]);
+    if (!selectedChat) return [] as Message[];
+    const stored = messagesByChat[selectedChat.id] || [];
+    if (stored.length) return stored;
+
+    const intro: Message = {
+      id: `intro-${selectedChat.id}`,
+      from: 'other',
+      text: `Hola, soy ${selectedChat.name}. Puedes escribirme por aqui para coordinar tu consulta.`,
+      time: 'Ahora',
+      dateLabel: 'Nuevo chat',
+    };
+    return [intro];
+  }, [messagesByChat, selectedChat]);
+
+  const handleSend = async () => {
+    const text = reply.trim();
+    if (!text || !selectedChat) return;
+
+    const timeLabel = new Intl.DateTimeFormat('es-DO', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date());
+
+    const nextMessage: Message = {
+      id: `out-${Date.now()}`,
+      from: 'me',
+      text,
+      time: timeLabel,
+    };
+
+    const nextMap = {
+      ...messagesByChat,
+      [selectedChat.id]: [...(messagesByChat[selectedChat.id] || []), nextMessage],
+    };
+
+    setMessagesByChat(nextMap);
+    setReply('');
+    await persistMessages(nextMap);
+  };
 
   const renderMenuItem = (
     icon: string,
@@ -434,76 +448,11 @@ const PacienteChatScreen: React.FC = () => {
             <Image source={userAvatarSource} style={styles.userAvatar} />
             <Text style={styles.userName}>{fullName}</Text>
             <Text style={styles.userPlan}>{planLabel}</Text>
-            {!user?.fotoUrl ? (
-              <Text style={styles.hintText}>No tienes foto. Ve a Perfil para agregarla.</Text>
-            ) : null}
-          </View>
-          <View style={styles.menu}>
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('DashboardPaciente')}
-            >
-              <MaterialIcons name="grid-view" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.home')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('NuevaConsultaPaciente')}
-            >
-              <MaterialIcons name="person-search" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('DashboardPaciente', { initialSection: 'appointments' })}
-            >
-              <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.appointments')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('SalaEsperaVirtualPaciente')}
-            >
-              <MaterialIcons name="videocam" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.videocall')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.menuItemRow, styles.menuItemActive]}>
-              <MaterialIcons name="chat-bubble" size={20} color={colors.primary} />
-              <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.chat')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteRecetasDocumentos')}
-            >
-              <MaterialIcons name="description" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.recipesDocs')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacientePerfil')}
-            >
-              <MaterialIcons name="account-circle" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.profile')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteConfiguracion')}
-            >
-              <MaterialIcons name="settings" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.settings')}</Text>
-            </TouchableOpacity>
           </View>
           {renderMenuItem('grid-view', t('menu.home'), false, () => navigation.navigate('DashboardPaciente'))}
-          {renderMenuItem('person-search', t('menu.searchDoctor'))}
-          {renderMenuItem('calendar-today', t('menu.appointments'))}
-          {renderMenuItem('videocam', t('menu.videocall'))}
+          {renderMenuItem('person-search', t('menu.searchDoctor'), false, () => navigation.navigate('NuevaConsultaPaciente'))}
+          {renderMenuItem('calendar-today', t('menu.appointments'), false, () => navigation.navigate('PacienteCitas'))}
+          {renderMenuItem('videocam', t('menu.videocall'), false, () => navigation.navigate('SalaEsperaVirtualPaciente'))}
           {renderMenuItem('chat-bubble', t('menu.chat'), true)}
           {renderMenuItem('description', t('menu.recipesDocs'), false, () => navigation.navigate('PacienteRecetasDocumentos'))}
           {renderMenuItem('account-circle', t('menu.profile'), false, () => navigation.navigate('PacientePerfil'))}
@@ -554,7 +503,7 @@ const PacienteChatScreen: React.FC = () => {
                         <Text style={styles.chatTime}>{latest?.time || chat.timeLabel}</Text>
                       </View>
                       <Text style={styles.chatMsg} numberOfLines={1}>
-                        {latest?.text || `${chat.specialty} ï¿½ ${chat.timeLabel}`}
+                        {latest?.text || `${chat.specialty} · ${chat.timeLabel}`}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -567,7 +516,7 @@ const PacienteChatScreen: React.FC = () => {
         <View style={styles.chatPanel}>
           <View style={styles.chatHeader}>
             <Text style={styles.chatHeaderTitle}>
-              {selectedChat ? `${selectedChat.name} ï¿½ ${selectedChat.specialty}` : 'Selecciona un chat'}
+              {selectedChat ? `${selectedChat.name} · ${selectedChat.specialty}` : 'Selecciona un chat'}
             </Text>
           </View>
           <ScrollView contentContainerStyle={styles.messagesWrap} showsVerticalScrollIndicator={false}>
@@ -619,28 +568,22 @@ const styles = StyleSheet.create({
   userAvatar: { width: 76, height: 76, borderRadius: 76, marginBottom: 10, borderWidth: 4, borderColor: '#f5f7fb' },
   userName: { fontWeight: '800', color: colors.dark, fontSize: 14, textAlign: 'center' },
   userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
-  hintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700' },
-  menu: {
-    marginTop: 10,
-    gap: 6,
-    flex: Platform.OS === 'web' ? 1 : 0,
-    flexDirection: Platform.OS === 'web' ? 'column' : 'row',
-    flexWrap: 'wrap',
-  },
-  menuItemRow: {
+  menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginTop: 6,
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 12,
-    minWidth: Platform.OS === 'web' ? 0 : 150,
   },
   menuItemActive: {
     backgroundColor: 'rgba(19,127,236,0.10)',
     borderRightWidth: 3,
     borderRightColor: colors.primary,
   },
+  menuItemHover: { backgroundColor: '#f4f8fc' },
+  menuItemPressed: { opacity: 0.7, transform: [{ scale: 0.985 }] },
   menuText: { fontSize: 14, color: colors.muted, fontWeight: '700' },
   menuTextActive: { color: colors.primary },
   logoutButton: {

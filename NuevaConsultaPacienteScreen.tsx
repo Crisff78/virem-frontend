@@ -1,7 +1,9 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,7 +17,9 @@ import * as SecureStore from 'expo-secure-store';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { RootStackParamList } from './navigation/types';
+import { apiUrl } from './config/backend';
 
 import { useLanguage } from './localization/LanguageContext';
 import { ensurePatientSessionUser, getPatientDisplayName } from './utils/patientSession';
@@ -25,6 +29,8 @@ const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
 
 const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
+const AUTH_TOKEN_KEY = 'authToken';
+const LEGACY_TOKEN_KEY = 'token';
 
 type User = {
   id?: number | string;
@@ -39,16 +45,18 @@ type User = {
   fotoUrl?: string;
 };
 
-type Doctor = {
-  id: string;
-  name: string;
-  specialty: string;
-  city: string;
-  country: string;
-  rating: string;
-  reviews: string;
-  focus: string;
-  avatar: ImageSourcePropType;
+type SpecialtyItem = {
+  icon: string;
+  label: string;
+  description: string;
+  totalMedicos: number;
+};
+
+type SpecialtyCardProps = {
+  icon: string;
+  label: string;
+  description: string;
+  onPress: () => void;
 };
 
 const parseUser = (raw: string | null): User | null => {
@@ -67,6 +75,21 @@ const normalizeText = (value: unknown) =>
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
+
+const sanitizeFotoUrl = (value: unknown) => {
+  const clean = String(value || '').trim();
+  if (!clean) return '';
+  if (clean.toLowerCase().startsWith('blob:')) return '';
+  return clean;
+};
+
+const resolveAvatarSource = (value: unknown): ImageSourcePropType => {
+  const clean = sanitizeFotoUrl(value);
+  if (clean) {
+    return { uri: clean };
+  }
+  return DefaultAvatar;
+};
 
 const FALLBACK_SPECIALTIES: SpecialtyItem[] = [
   { icon: 'heart-outline', label: 'Cardiologia', description: 'Corazon y sistema circulatorio', totalMedicos: 0 },
@@ -174,11 +197,13 @@ const SpecialtyCardInner: React.FC<SpecialtyCardProps> = ({
 
 const NuevaConsultaPacienteScreen: React.FC = () => {
 
-  const { t } = useLanguage();
+  const { t, tx } = useLanguage();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [user, setUser] = useState<User | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
   const [searchText, setSearchText] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState('Cardiología');
+  const [specialtyList, setSpecialtyList] = useState<SpecialtyItem[]>(FALLBACK_SPECIALTIES);
+  const [loadingSpecialties, setLoadingSpecialties] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -267,10 +292,93 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
         setUser(sessionUser);
       } catch {
         setUser(null);
+      } finally {
+        setLoadingUser(false);
       }
     };
 
     loadUser();
+  }, []);
+
+  useEffect(() => {
+    const loadSpecialties = async () => {
+      setLoadingSpecialties(true);
+      try {
+        const token = await getAuthToken();
+        if (!token) {
+          setSpecialtyList(FALLBACK_SPECIALTIES);
+          return;
+        }
+
+        const byCatalogResponse = await fetch(apiUrl('/api/medicos/especialidades'), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const byCatalogPayload = await byCatalogResponse.json().catch(() => null);
+
+        if (
+          byCatalogResponse.ok &&
+          byCatalogPayload?.success &&
+          Array.isArray(byCatalogPayload?.especialidades)
+        ) {
+          const items: SpecialtyItem[] = byCatalogPayload.especialidades
+            .map((item: any) => {
+              const name = String(item?.nombre || '').trim();
+              const total = Number(item?.totalMedicos || 0);
+              if (!name) return null;
+              return {
+                icon: getSpecialtyIcon(name),
+                label: name,
+                description: getSpecialtyDescription(name, total),
+                totalMedicos: Number.isFinite(total) ? total : 0,
+              } as SpecialtyItem;
+            })
+            .filter((item: SpecialtyItem | null): item is SpecialtyItem => Boolean(item))
+            .sort((a: SpecialtyItem, b: SpecialtyItem) => b.totalMedicos - a.totalMedicos || a.label.localeCompare(b.label, 'es'));
+
+          if (items.length) {
+            setSpecialtyList(items);
+            return;
+          }
+        }
+
+        const byMedicosResponse = await fetch(apiUrl('/api/medicos'), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const byMedicosPayload = await byMedicosResponse.json().catch(() => null);
+
+        if (byMedicosResponse.ok && byMedicosPayload?.success && Array.isArray(byMedicosPayload?.medicos)) {
+          const counts = new Map<string, number>();
+          for (const medico of byMedicosPayload.medicos) {
+            const name = String(medico?.especialidad || 'Medicina General').trim() || 'Medicina General';
+            counts.set(name, (counts.get(name) || 0) + 1);
+          }
+
+          const items = Array.from(counts.entries())
+            .map(([name, total]) => ({
+              icon: getSpecialtyIcon(name),
+              label: name,
+              description: getSpecialtyDescription(name, total),
+              totalMedicos: total,
+            }))
+            .sort((a, b) => b.totalMedicos - a.totalMedicos || a.label.localeCompare(b.label, 'es'));
+
+          if (items.length) {
+            setSpecialtyList(items);
+            return;
+          }
+        }
+
+        setSpecialtyList(FALLBACK_SPECIALTIES);
+      } catch {
+        setSpecialtyList(FALLBACK_SPECIALTIES);
+      } finally {
+        setLoadingSpecialties(false);
+      }
+    };
+
+    loadSpecialties();
   }, []);
 
   const fullName = useMemo(() => getPatientDisplayName(user, 'Paciente'), [user]);
@@ -284,61 +392,42 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
     return resolveAvatarSource(user?.fotoUrl);
   }, [user]);
 
-  const specialtyList = [
-    { icon: 'heart-outline', label: 'Cardiologia', description: 'Corazon y sistema circulatorio' },
-    { icon: 'baby-face-outline', label: 'Pediatria', description: 'Atencion integral para ni�os' },
-    { icon: 'brain', label: 'Neurologia', description: 'Cerebro y sistema nervioso' },
-    { icon: 'face-man-outline', label: 'Dermatologia', description: 'Cuidado de la piel y cabello' },
-    { icon: 'stethoscope', label: 'Medicina General', description: 'Atencion primaria inicial' },
-    { icon: 'eye-outline', label: 'Oftalmologia', description: 'Salud visual y ocular' },
-    { icon: 'food-apple-outline', label: 'Nutricion', description: 'Dieta y bienestar alimenticio' },
-    { icon: 'pill', label: 'Endocrinologia', description: 'Hormonas y metabolismo' },
-  ];
+  const filteredSpecialties = useMemo(() => {
+    const query = normalizeText(searchText);
+    if (!query) return specialtyList;
+    return specialtyList.filter((item) => {
+      return (
+        normalizeText(item.label).includes(query) ||
+        normalizeText(item.description).includes(query)
+      );
+    });
+  }, [searchText, specialtyList]);
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+    await AsyncStorage.removeItem(LEGACY_TOKEN_KEY);
     await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(LEGACY_TOKEN_KEY);
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+      } else {
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_USER_STORAGE_KEY);
+        await SecureStore.deleteItemAsync(STORAGE_KEY);
+      }
+    } catch { }
+
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
-  const filteredDoctors = useMemo(() => {
-    const query = searchText.trim().toLowerCase();
-    return doctors.filter((doctor) => {
-      if (query) {
-        const haystack = `${doctor.name} ${doctor.specialty} ${doctor.city} ${doctor.focus}`.toLowerCase();
-        return haystack.includes(query);
-      }
-
-      const matchesFilter =
-        selectedFilter === 'Más' ||
-        doctor.specialty.toLowerCase().includes(selectedFilter.toLowerCase().replace('í', 'i')) ||
-        doctor.specialty.toLowerCase().includes(selectedFilter.toLowerCase());
-
-      return matchesFilter;
-    });
-  }, [searchText, selectedFilter]);
-
-  useEffect(() => {
-    const query = searchText.trim().toLowerCase();
-    if (!query) return;
-
-    const firstMatch = doctors.find((doctor) => {
-      const haystack = `${doctor.name} ${doctor.specialty} ${doctor.city} ${doctor.focus}`.toLowerCase();
-      return haystack.includes(query);
-    });
-
-    if (!firstMatch) return;
-    const autoFilter = resolveFilterFromSpecialty(firstMatch.specialty);
-    if (autoFilter !== selectedFilter) {
-      setSelectedFilter(autoFilter);
-    }
-  }, [searchText, selectedFilter]);
-
-  const handleOpenDoctor = (doctor: Doctor) => {
-    navigation.navigate('PerfilEspecialistaAgendar', {
-      specialty: doctor.specialty,
-      doctorId: doctor.id,
-    });
+  const onSelectSpecialty = (label: string) => {
+    navigation.navigate('EspecialistasPorEspecialidad', { specialty: label });
   };
 
   if (loadingUser) {
@@ -388,7 +477,10 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
               <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteCitas')}
+            >
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
@@ -424,14 +516,6 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
               <MaterialIcons name="account-circle" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.profile')}</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteConfiguracion')}
-            >
-              <MaterialIcons name="settings" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.settings')}</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -442,19 +526,20 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
       </View>
 
       <ScrollView style={styles.main} contentContainerStyle={{ paddingBottom: 30 }}>
-        <View style={styles.searchHeaderCard}>
+        <View style={styles.header}>
           <View style={styles.searchBox}>
             <MaterialIcons name="search" size={20} color={colors.muted} />
             <TextInput
-              value={searchText}
-              onChangeText={setSearchText}
-              placeholder="Busca un médico para consulta online"
+              placeholder="Busca un medico para consulta online"
               placeholderTextColor="#8aa7bf"
               style={styles.searchInput}
             />
           </View>
 
-          <TouchableOpacity style={styles.notifBtn}>
+          <TouchableOpacity
+            style={styles.notifBtn}
+            onPress={() => navigation.navigate('PacienteNotificaciones')}
+          >
             <MaterialIcons name="notifications" size={22} color={colors.dark} />
             <View style={styles.notifDot} />
           </TouchableOpacity>
@@ -495,44 +580,60 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Especialidades Medicas</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => setSearchText('')}>
             <Text style={styles.sectionLink}>
               {loadingSpecialties ? 'Actualizando...' : `${specialtyList.length} disponibles`}
             </Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.doctorGrid}>
-          {filteredDoctors.map((doctor) => (
-            <View key={doctor.id} style={styles.doctorCard}>
-              <View style={styles.doctorImageWrap}>
-                <Image source={doctor.avatar} style={styles.doctorImage} />
-                <View style={styles.ratingBadge}>
-                  <MaterialIcons name="star" size={12} color="#f59e0b" />
-                  <Text style={styles.ratingText}>{doctor.rating}</Text>
-                </View>
-              </View>
-
-              <Text style={styles.doctorName}>{doctor.name}</Text>
-              <Text style={styles.doctorSpecialty}>{doctor.specialty}</Text>
-
-              <View style={styles.locationRow}>
-                <MaterialIcons name="location-on" size={13} color={colors.muted} />
-                <Text style={styles.locationText}>
-                  {doctor.city}, {doctor.country}
-                </Text>
-              </View>
-
-              <Text style={styles.metaText}>
-                {doctor.reviews} • {doctor.focus}
+        <View style={styles.specialtiesGrid}>
+          {filteredSpecialties.map((item) => (
+            <View key={item.label} style={{ width: '24%', minWidth: 190 }}>
+              <SpecialtyCard
+                icon={item.icon}
+                label={item.label}
+                description={item.description}
+                onPress={() => onSelectSpecialty(item.label)}
+              />
+              <Text style={styles.specialtyCountText}>
+                {item.totalMedicos > 0
+                  ? `${item.totalMedicos} medico(s) disponible(s)`
+                  : 'Disponibilidad variable'}
               </Text>
-
-              <TouchableOpacity style={styles.cardButton} onPress={() => handleOpenDoctor(doctor)}>
-                <Text style={styles.cardButtonText}>Ver Perfil y Agendar</Text>
-                <MaterialIcons name="arrow-forward" size={14} color="#fff" />
-              </TouchableOpacity>
             </View>
           ))}
+          {!filteredSpecialties.length ? (
+            <View style={styles.emptySpecialtyWrap}>
+              <Text style={styles.emptySpecialtyText}>
+                No se encontraron especialidades para "{searchText.trim()}".
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.expressCard}>
+          <View style={styles.expressLeft}>
+            <View style={styles.expressIconWrap}>
+              <MaterialIcons name="emergency" size={24} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.expressTitle}>Necesitas atencion inmediata?</Text>
+              <Text style={styles.expressSubtitle}>
+                Contamos con medicos de guardia disponibles 24/7 para videoconsultas de urgencia.
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.expressBtn}
+            onPress={() =>
+              navigation.navigate('EspecialistasPorEspecialidad', { specialty: 'Medicina General' })
+            }
+          >
+            <MaterialIcons name="bolt" size={18} color="#fff" />
+            <Text style={styles.expressBtnText}>Consulta Express</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -632,14 +733,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Platform.OS === 'web' ? 26 : 14,
     paddingTop: Platform.OS === 'web' ? 18 : 12,
   },
-  searchHeaderCard: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e3ebf5',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -649,13 +742,19 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   searchBox: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#f4f8fc',
-    borderRadius: 10,
-    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    paddingHorizontal: 14,
     paddingVertical: 10,
+    shadowColor: colors.dark,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   searchInput: { flex: 1, color: colors.dark, fontWeight: '600' },
   notifBtn: {
@@ -682,96 +781,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#fff',
   },
-  filterRow: { alignItems: 'center', gap: 8, paddingTop: 12, paddingBottom: 2 },
-  filterLabel: { color: '#90a4b8', fontSize: 12, fontWeight: '800', marginRight: 4 },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#d8e3ee',
-    backgroundColor: '#fff',
-  },
-  filterChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
-  },
-  filterChipText: { color: '#5e748a', fontSize: 12, fontWeight: '700' },
-  filterChipTextActive: { color: '#fff' },
-  filterMoreChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#edf2f7',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  filterMoreText: { color: '#6b7f95', fontSize: 12, fontWeight: '700' },
-  resultsHeader: {
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  resultsTitle: { color: colors.dark, fontSize: 28, fontWeight: '900' },
-  resultsCount: { color: colors.muted, fontSize: 28, fontWeight: '700' },
-  sortRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  sortLabel: { color: '#95a6b7', fontSize: 12, fontWeight: '700' },
-  sortValue: { color: colors.dark, fontSize: 13, fontWeight: '800' },
-  doctorGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  doctorCard: {
-    width: Platform.OS === 'web' ? '24%' : '100%',
-    minWidth: Platform.OS === 'web' ? 220 : 0,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e1eaf4',
-    borderRadius: 14,
-    padding: 10,
-  },
-  doctorImageWrap: { position: 'relative' },
-  doctorImage: {
-    width: '100%',
-    height: 170,
-    borderRadius: 10,
-    backgroundColor: '#f3f6fa',
-  },
-  ratingBadge: {
-    position: 'absolute',
-    right: 8,
-    top: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  ratingText: { color: colors.dark, fontSize: 11, fontWeight: '900' },
-  doctorName: { marginTop: 10, color: colors.dark, fontSize: 16, fontWeight: '900' },
-  doctorSpecialty: { marginTop: 2, color: colors.primary, fontSize: 14, fontWeight: '800' },
-  locationRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  locationText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
-  metaText: { marginTop: 4, color: '#9badbe', fontSize: 11, fontWeight: '600' },
-  cardButton: {
-    marginTop: 10,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-  },
-  cardButtonText: { color: '#fff', fontSize: 14, fontWeight: '900' },
 
   centerHeader: { alignItems: 'center', marginBottom: 20, marginTop: 8 },
   pageTitle: {
@@ -872,6 +881,30 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: colors.muted,
     fontSize: 12,
+    textAlign: 'center',
+  },
+  specialtyCountText: {
+    marginTop: 6,
+    textAlign: 'center',
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  emptySpecialtyWrap: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#dbe7f2',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    backgroundColor: '#f9fcff',
+  },
+  emptySpecialtyText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
     textAlign: 'center',
   },
 

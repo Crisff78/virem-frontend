@@ -242,7 +242,10 @@ const PacienteNotificacionesScreen: React.FC = () => {
               <Text style={styles.menuText}>{t('menu.searchDoctor')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItemRow}>
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteCitas')}
+            >
               <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.appointments')}</Text>
             </TouchableOpacity>
@@ -257,21 +260,16 @@ const PacienteNotificacionesScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteChat')}
-            >
-              <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.chat')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItemRow}
               onPress={() => navigation.navigate('PacienteRecetasDocumentos')}
             >
               <MaterialIcons name="description" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.recipesDocs')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.menuItemRow, styles.menuItemActive]}>
+            <TouchableOpacity
+              style={[styles.menuItemRow, styles.menuItemActive]}
+              onPress={() => navigation.navigate('PacienteNotificaciones')}
+            >
               <MaterialIcons name="notifications" size={20} color={colors.primary} />
               <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.notifications')}</Text>
             </TouchableOpacity>
@@ -382,8 +380,8 @@ const PacienteNotificacionesScreen: React.FC = () => {
                 {group.section === 'HOY'
                   ? t('notif.today')
                   : group.section === 'AYER'
-                    ? t('notif.yesterday')
-                    : t('notif.thisWeek')}
+                  ? t('notif.yesterday')
+                  : t('notif.thisWeek')}
               </Text>
               {group.items.length === 0 ? null : group.items.map((item) => (
                 <TouchableOpacity
