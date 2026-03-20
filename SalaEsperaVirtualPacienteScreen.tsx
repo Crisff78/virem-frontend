@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
+  Linking,
   Platform,
   View,
   Text,
@@ -14,13 +16,14 @@ import {
 import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { io, Socket } from 'socket.io-client';
 
 import { useLanguage } from './localization/LanguageContext';
 import type { RootStackParamList } from './navigation/types';
-import { apiUrl } from './config/backend';
+import { apiUrl, BACKEND_URL } from './config/backend';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { ensurePatientSessionUser, getPatientDisplayName } from './utils/patientSession';
@@ -53,6 +56,9 @@ type User = {
 type CitaItem = {
   citaid?: string;
   fechaHoraInicio?: string | null;
+  modalidad?: string;
+  estadoCodigo?: string;
+  videoSalaId?: string | null;
   medico?: {
     nombreCompleto?: string;
     especialidad?: string;
@@ -151,12 +157,18 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
   const [upcomingCitas, setUpcomingCitas] = useState<CitaItem[]>([]);
   const [selectedCitaId, setSelectedCitaId] = useState('');
   const [loadingCita, setLoadingCita] = useState(false);
+  const [loadingRoom, setLoadingRoom] = useState(false);
+  const [openingRoom, setOpeningRoom] = useState(false);
+  const [roomJoinUrl, setRoomJoinUrl] = useState('');
+  const [roomStatus, setRoomStatus] = useState('');
+  const [roomCanJoin, setRoomCanJoin] = useState(false);
   const dot1 = useRef(new Animated.Value(0.25)).current;
   const dot2 = useRef(new Animated.Value(0.25)).current;
   const dot3 = useRef(new Animated.Value(0.25)).current;
   const signalPulse = useRef(new Animated.Value(0.35)).current;
   const panelTranslateX = useRef(new Animated.Value(430)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const socketRef = useRef<Socket | null>(null);
   const requestedCitaId = String(route.params?.citaId || '').trim();
 
   useEffect(() => {
@@ -295,15 +307,22 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
           return;
         }
 
-        const response = await fetch(apiUrl('/api/users/me/citas?scope=upcoming&limit=30'), {
+        const response = await fetch(apiUrl('/api/agenda/me/citas?scope=upcoming&limit=40'), {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` },
         });
         const payload = await response.json().catch(() => null);
         if (response.ok && payload?.success && Array.isArray(payload?.citas) && payload.citas.length) {
-          const ordered = [...(payload.citas as CitaItem[])].sort(
+          const ordered = (payload.citas as CitaItem[])
+            .filter((item) => String(item?.modalidad || '').toLowerCase() === 'virtual')
+            .filter((item) =>
+              ['pendiente', 'confirmada', 'reprogramada'].includes(
+                String(item?.estadoCodigo || '').toLowerCase()
+              )
+            )
+            .sort(
             (a, b) => parseDateMs(a?.fechaHoraInicio) - parseDateMs(b?.fechaHoraInicio)
-          );
+            );
           setUpcomingCitas(ordered);
 
           const fromParam = requestedCitaId
@@ -343,6 +362,135 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
       setSelectedCitaId(selectedId);
     }
   }, [selectedCitaId, upcomingCitas]);
+
+  useEffect(() => {
+    const loadVideoRoom = async () => {
+      const citaId = String(selectedCitaId || '').trim();
+      if (!citaId) {
+        setRoomJoinUrl('');
+        setRoomStatus('');
+        setRoomCanJoin(false);
+        return;
+      }
+
+      setLoadingRoom(true);
+      try {
+        const token = await getAuthToken();
+        if (!token) {
+          setRoomJoinUrl('');
+          setRoomStatus('');
+          setRoomCanJoin(false);
+          return;
+        }
+
+        const response = await fetch(apiUrl(`/api/agenda/me/citas/${citaId}/video-sala`), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.success || !payload?.videoSala) {
+          setRoomJoinUrl('');
+          setRoomStatus('');
+          setRoomCanJoin(false);
+          return;
+        }
+
+        setRoomJoinUrl(String(payload.videoSala.joinUrl || '').trim());
+        setRoomStatus(String(payload.videoSala.estado || '').trim().toLowerCase());
+        setRoomCanJoin(Boolean(payload.videoSala.canJoin));
+      } catch {
+        setRoomJoinUrl('');
+        setRoomStatus('');
+        setRoomCanJoin(false);
+      } finally {
+        setLoadingRoom(false);
+      }
+    };
+
+    loadVideoRoom();
+  }, [selectedCitaId]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let mounted = true;
+      const initSocket = async () => {
+        const token = await getAuthToken();
+        if (!mounted || !token) return;
+
+        const socket = io(BACKEND_URL, {
+          transports: ['websocket'],
+          auth: { token },
+        });
+        socketRef.current = socket;
+
+        socket.on('cita_actualizada', (payload: any) => {
+          const citaId = String(payload?.citaId || '').trim();
+          if (!citaId || citaId !== String(selectedCitaId || '').trim()) return;
+          const videoSala = payload?.videoSala;
+          if (videoSala && mounted) {
+            setRoomJoinUrl(String(videoSala?.joinUrl || '').trim());
+            setRoomStatus(String(videoSala?.estado || '').trim().toLowerCase());
+          }
+        });
+      };
+
+      initSocket();
+      return () => {
+        mounted = false;
+        if (socketRef.current) {
+          socketRef.current.removeAllListeners();
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
+      };
+    }, [selectedCitaId])
+  );
+
+  const enterVideoRoom = async () => {
+    if (!nextCita?.citaid) {
+      return;
+    }
+
+    setOpeningRoom(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        return;
+      }
+
+      const citaId = String(nextCita.citaid).trim();
+      const openResponse = await fetch(apiUrl(`/api/agenda/me/citas/${citaId}/video-sala`), {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const openPayload = await openResponse.json().catch(() => null);
+      const joinUrl = String(openPayload?.videoSala?.joinUrl || roomJoinUrl || '').trim();
+      const canJoin = Boolean(openPayload?.videoSala?.canJoin ?? roomCanJoin);
+      if (!joinUrl) {
+        Alert.alert('Sala no disponible', 'La sala virtual aun no esta lista.');
+        return;
+      }
+      if (!canJoin) {
+        Alert.alert('Sala de espera', 'El medico aun no inicia la videollamada.');
+        return;
+      }
+
+      if (Platform.OS === 'web') {
+        const webOpen = (globalThis as any)?.open;
+        if (typeof webOpen === 'function') {
+          webOpen(joinUrl, '_blank');
+        } else {
+          await Linking.openURL(joinUrl);
+        }
+      } else {
+        await Linking.openURL(joinUrl);
+      }
+    } catch {
+      Alert.alert('Error', 'No se pudo abrir la videollamada.');
+    } finally {
+      setOpeningRoom(false);
+    }
+  };
 
   const openSettings = () => {
     setSettingsOpen(true);
@@ -474,6 +622,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
   const userAvatarSource: ImageSourcePropType = useMemo(() => {
     return resolveAvatarSource(user?.fotoUrl);
   }, [user]);
+  const hasProfilePhoto = useMemo(() => Boolean(sanitizeFotoUrl(user?.fotoUrl)), [user?.fotoUrl]);
   const doctorAvatarSource: ImageSourcePropType = useMemo(() => {
     const foto = sanitizeFotoUrl(nextCita?.medico?.fotoUrl);
     if (foto) return { uri: foto };
@@ -519,6 +668,9 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
             <Image source={userAvatarSource} style={styles.userAvatar} />
             <Text style={styles.userName}>{fullName}</Text>
             <Text style={styles.userPlan}>{planLabel}</Text>
+            {!hasProfilePhoto ? (
+              <Text style={styles.hintText}>No tienes foto. Ve a Perfil para agregarla.</Text>
+            ) : null}
           </View>
 
           <View style={styles.menu}>
@@ -551,17 +703,17 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
               <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.videocall')}</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('PacienteChat')}>
+              <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.chat')}</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={styles.menuItem}
               onPress={() => navigation.navigate('PacienteRecetasDocumentos')}
             >
               <MaterialIcons name="description" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.recipesDocs')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('PacienteChat')}>
-              <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.chat')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('PacientePerfil')}>
@@ -707,6 +859,16 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
                   <Text style={styles.summaryValue}>{citaHora}</Text>
                 </View>
               </View>
+
+              <View style={[styles.summaryRow, styles.summaryRowLast]}>
+                <MaterialIcons name="meeting-room" size={16} color={colors.primary} />
+                <View>
+                  <Text style={styles.summaryLabel}>Estado de sala</Text>
+                  <Text style={styles.summaryValue}>
+                    {loadingRoom ? 'Sincronizando...' : roomStatus || 'pendiente'}
+                  </Text>
+                </View>
+              </View>
             </View>
 
             <View style={styles.cameraCard}>
@@ -726,6 +888,17 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
             </View>
 
             <View style={styles.bottomActions}>
+              <TouchableOpacity
+                style={[styles.joinBtn, (!nextCita || !roomCanJoin || openingRoom) && styles.disabledBtn]}
+                onPress={enterVideoRoom}
+                disabled={!nextCita || !roomCanJoin || openingRoom}
+              >
+                <MaterialIcons name="video-call" size={15} color="#fff" />
+                <Text style={styles.joinBtnText}>
+                  {openingRoom ? 'Abriendo...' : roomCanJoin ? 'Entrar a consulta' : 'En sala de espera'}
+                </Text>
+              </TouchableOpacity>
+
               <TouchableOpacity style={styles.settingsBtn} onPress={openSettings}>
                 <MaterialIcons name="settings" size={15} color={colors.primary} />
                 <Text style={styles.settingsBtnText}>Ajustes</Text>
@@ -1004,6 +1177,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: 'center',
   },
+  hintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   menu: {
     marginTop: 10,
     gap: 6,
@@ -1291,6 +1465,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bottomActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  joinBtn: {
+    flex: 1.4,
+    borderRadius: 10,
+    paddingVertical: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    backgroundColor: colors.primary,
+  },
+  joinBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
+  disabledBtn: { opacity: 0.55 },
   settingsBtn: {
     flex: 1,
     borderWidth: 1,

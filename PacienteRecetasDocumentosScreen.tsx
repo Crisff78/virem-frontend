@@ -1,6 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Platform,
@@ -65,6 +64,13 @@ const parseUser = (raw: string | null): User | null => {
   } catch {
     return null;
   }
+};
+
+const sanitizeFotoUrl = (value: unknown) => {
+  const clean = String(value || '').trim();
+  if (!clean) return '';
+  if (clean.toLowerCase().startsWith('blob:')) return '';
+  return clean;
 };
 
 const recetas: DocumentItem[] = [
@@ -231,24 +237,17 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
   }, [user]);
 
   const userAvatarSource: ImageSourcePropType = useMemo(() => {
-    if (user?.fotoUrl && user.fotoUrl.trim().length > 0) return { uri: user.fotoUrl.trim() };
+    const fotoUrl = sanitizeFotoUrl(user?.fotoUrl);
+    if (fotoUrl) return { uri: fotoUrl };
     return DefaultAvatar;
-  }, [user]);
+  }, [user?.fotoUrl]);
+  const hasProfilePhoto = useMemo(() => Boolean(sanitizeFotoUrl(user?.fotoUrl)), [user?.fotoUrl]);
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem(STORAGE_KEY);
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
-
-  if (loadingUser) {
-    return (
-      <View style={styles.loaderWrap}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loaderText}>Cargando tus documentos...</Text>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -266,6 +265,10 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
             <Image source={userAvatarSource} style={styles.userAvatar} />
             <Text style={styles.userName}>{fullName}</Text>
             <Text style={styles.userPlan}>{planLabel}</Text>
+            {loadingUser ? <Text style={styles.syncText}>Actualizando perfil...</Text> : null}
+            {!hasProfilePhoto ? (
+              <Text style={styles.hintText}>No tienes foto. Ve a Perfil para agregarla.</Text>
+            ) : null}
           </View>
 
           <View style={styles.menu}>
@@ -314,6 +317,14 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
             >
               <MaterialIcons name="account-circle" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.profile')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteConfiguracion')}
+            >
+              <MaterialIcons name="settings" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -388,8 +399,6 @@ const styles = StyleSheet.create({
     flexDirection: Platform.OS === 'web' ? 'row' : 'column',
     backgroundColor: colors.bg,
   },
-  loaderWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg },
-  loaderText: { marginTop: 10, color: colors.muted, fontWeight: '700' },
   sidebar: {
     width: Platform.OS === 'web' ? 280 : '100%',
     backgroundColor: colors.white,
@@ -408,6 +417,8 @@ const styles = StyleSheet.create({
   userAvatar: { width: 76, height: 76, borderRadius: 76, marginBottom: 10, borderWidth: 4, borderColor: '#f5f7fb' },
   userName: { fontWeight: '800', color: colors.dark, fontSize: 14 },
   userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
+  syncText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  hintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   menu: {
     marginTop: 10,
     gap: 6,

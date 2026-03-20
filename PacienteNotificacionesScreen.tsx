@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   View,
@@ -13,11 +13,13 @@ import {
 import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { io, Socket } from 'socket.io-client';
 import type { RootStackParamList } from './navigation/types';
 import { useLanguage } from './localization/LanguageContext';
+import { apiUrl, BACKEND_URL } from './config/backend';
 import { ensurePatientSessionUser, getPatientDisplayName } from './utils/patientSession';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
@@ -25,6 +27,9 @@ const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
 
 const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
+const AUTH_TOKEN_KEY = 'authToken';
+const LEGACY_TOKEN_KEY = 'token';
+const MIN_REFRESH_INTERVAL_MS = 12000;
 
 type User = {
   nombres?: string;
@@ -45,9 +50,20 @@ type NotificationItem = {
   unread: boolean;
   icon: string;
   color: string;
-  section: 'HOY' | 'AYER' | 'ESTA SEMANA';
+  section: 'HOY' | 'AYER' | 'ESTA SEMANA' | 'ANTERIOR';
   type: 'citas' | 'mensajes' | 'documentos';
   action?: string;
+  createdAt?: string | null;
+};
+
+type AgendaNotification = {
+  id?: string;
+  tipo?: string;
+  titulo?: string;
+  contenido?: string;
+  leida?: boolean;
+  createdAt?: string;
+  data?: Record<string, unknown>;
 };
 
 const parseUser = (raw: string | null): User | null => {
@@ -59,105 +75,288 @@ const parseUser = (raw: string | null): User | null => {
   }
 };
 
-const notificationsData: NotificationItem[] = [
-  {
-    id: '1',
-    title: 'Nueva cita confirmada',
-    message: 'Su cita con el Dr. Arreola ha sido programada para manana a las 10:00 AM.',
-    time: 'hace 5 min',
-    unread: true,
-    icon: 'event-available',
-    color: '#137fec',
-    section: 'HOY',
-    type: 'citas',
-    action: 'Ver detalles',
-  },
-  {
-    id: '2',
-    title: 'Mensaje del Dr. Morales',
-    message: '"Hola, he revisado tus resultados de laboratorio. Por favor, revisa la receta adjunta."',
-    time: 'hace 2 horas',
-    unread: true,
-    icon: 'mail',
-    color: '#137fec',
-    section: 'HOY',
-    type: 'mensajes',
-    action: 'Responder',
-  },
-  {
-    id: '3',
-    title: 'Documento cargado',
-    message: 'Sus resultados de la prueba de Rayos X ya estan disponibles en su perfil.',
-    time: 'Ayer, 14:30 PM',
-    unread: false,
-    icon: 'folder-open',
-    color: '#94a3b8',
-    section: 'AYER',
-    type: 'documentos',
-    action: 'Descargar PDF',
-  },
-  {
-    id: '4',
-    title: 'Recibo generado',
-    message: 'Se ha generado el recibo por su consulta de telemedicina del dia 15/10.',
-    time: 'Ayer, 09:15 AM',
-    unread: false,
-    icon: 'payments',
-    color: '#94a3b8',
-    section: 'AYER',
-    type: 'documentos',
-  },
-  {
-    id: '5',
-    title: 'Recordatorio de Medicacion',
-    message: 'Es hora de renovar su receta de Metformina. Contacte a su medico.',
-    time: 'Martes, 18:00 PM',
-    unread: false,
-    icon: 'medical-information',
-    color: '#94a3b8',
-    section: 'ESTA SEMANA',
-    type: 'documentos',
-  },
+const sectionOrder: Array<'HOY' | 'AYER' | 'ESTA SEMANA' | 'ANTERIOR'> = [
+  'HOY',
+  'AYER',
+  'ESTA SEMANA',
+  'ANTERIOR',
 ];
-
-const sectionOrder: Array<'HOY' | 'AYER' | 'ESTA SEMANA'> = ['HOY', 'AYER', 'ESTA SEMANA'];
 type FilterType = 'todas' | 'citas' | 'mensajes' | 'documentos' | 'noleidas';
+
+const normalizeText = (value: unknown) =>
+  String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const getAuthToken = async (): Promise<string> => {
+  try {
+    if (Platform.OS === 'web') {
+      return (
+        localStorage.getItem(AUTH_TOKEN_KEY) ||
+        localStorage.getItem(LEGACY_TOKEN_KEY) ||
+        ''
+      ).trim();
+    }
+
+    const secureToken =
+      (await SecureStore.getItemAsync(AUTH_TOKEN_KEY)) ||
+      (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
+    if (secureToken && secureToken.trim()) return secureToken.trim();
+
+    const asyncToken =
+      (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) ||
+      (await AsyncStorage.getItem(LEGACY_TOKEN_KEY));
+    return String(asyncToken || '').trim();
+  } catch {
+    return '';
+  }
+};
+
+const toRelativeTime = (value: string | null | undefined) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return 'Ahora';
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 60000) return 'hace segundos';
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin < 60) return `hace ${diffMin} min`;
+  const diffHour = Math.round(diffMin / 60);
+  if (diffHour < 24) return `hace ${diffHour} h`;
+  const diffDay = Math.round(diffHour / 24);
+  if (diffDay < 7) return `hace ${diffDay} dia(s)`;
+  return new Intl.DateTimeFormat('es-DO', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
+
+const resolveSection = (value: string | null | undefined): NotificationItem['section'] => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return 'HOY';
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diffDays = Math.floor((today - target) / (24 * 60 * 60 * 1000));
+
+  if (diffDays <= 0) return 'HOY';
+  if (diffDays === 1) return 'AYER';
+  if (diffDays <= 7) return 'ESTA SEMANA';
+  return 'ANTERIOR';
+};
+
+const mapApiType = (tipoRaw: string): NotificationItem['type'] => {
+  const tipo = normalizeText(tipoRaw).toLowerCase();
+  if (tipo.includes('mensaje')) return 'mensajes';
+  if (tipo.includes('documento') || tipo.includes('receta')) return 'documentos';
+  return 'citas';
+};
+
+const mapIcon = (tipoRaw: string): { icon: string; color: string; action: string } => {
+  const tipo = normalizeText(tipoRaw).toLowerCase();
+  if (tipo.includes('mensaje')) {
+    return { icon: 'mail', color: '#137fec', action: 'Responder' };
+  }
+  if (tipo.includes('video')) {
+    return { icon: 'videocam', color: '#137fec', action: 'Entrar a sala' };
+  }
+  if (tipo.includes('reprogram')) {
+    return { icon: 'update', color: '#137fec', action: 'Ver cambios' };
+  }
+  if (tipo.includes('cancel')) {
+    return { icon: 'event-busy', color: '#ef4444', action: 'Ver cita' };
+  }
+  if (tipo.includes('confirm')) {
+    return { icon: 'event-available', color: '#137fec', action: 'Ver cita' };
+  }
+  return { icon: 'notifications', color: '#137fec', action: 'Ver detalles' };
+};
+
+const mapNotification = (item: AgendaNotification): NotificationItem => {
+  const createdAt = item?.createdAt || null;
+  const type = mapApiType(String(item?.tipo || ''));
+  const iconData = mapIcon(String(item?.tipo || ''));
+  return {
+    id: normalizeText(item?.id || ''),
+    title: normalizeText(item?.titulo || 'Notificacion'),
+    message: normalizeText(item?.contenido || ''),
+    time: toRelativeTime(createdAt),
+    unread: !Boolean(item?.leida),
+    icon: iconData.icon,
+    color: iconData.color,
+    section: resolveSection(createdAt),
+    type,
+    action: iconData.action,
+    createdAt,
+  };
+};
 
 const PacienteNotificacionesScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { t, tx } = useLanguage();
+  const { t } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterType>('todas');
-  const [notifications, setNotifications] = useState<NotificationItem[]>(notificationsData);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const socketRef = useRef<Socket | null>(null);
+  const lastRefreshRef = useRef(0);
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        if (Platform.OS === 'web') {
-          const webUser = ensurePatientSessionUser(parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY)));
-          if (webUser) {
-            setUser(webUser);
-            return;
-          }
-        }
+  const loadUser = useCallback(async () => {
+    try {
+      let sessionUser: User | null = null;
 
+      if (Platform.OS === 'web') {
+        const webUser = ensurePatientSessionUser(parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY)));
+        if (webUser) sessionUser = webUser;
+      }
+
+      if (!sessionUser) {
         const secureUser = ensurePatientSessionUser(
           parseUser(await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY))
         );
-        if (secureUser) {
-          setUser(secureUser);
-          return;
-        }
-
-        const asyncUser = ensurePatientSessionUser(parseUser(await AsyncStorage.getItem(STORAGE_KEY)));
-        setUser(asyncUser);
-      } catch {
-        setUser(null);
+        if (secureUser) sessionUser = secureUser;
       }
-    };
 
-    loadUser();
+      if (!sessionUser) {
+        sessionUser = ensurePatientSessionUser(parseUser(await AsyncStorage.getItem(STORAGE_KEY)));
+      }
+
+      const token = await getAuthToken();
+      if (token) {
+        const profileResponse = await fetch(apiUrl('/api/users/me/paciente-profile'), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const profilePayload = await profileResponse.json().catch(() => null);
+        if (profileResponse.ok && profilePayload?.success && profilePayload?.profile) {
+          const profile = profilePayload.profile as User;
+          sessionUser = {
+            ...(sessionUser || {}),
+            ...profile,
+            nombres: normalizeText((profile as any)?.nombres),
+            apellidos: normalizeText((profile as any)?.apellidos),
+            nombre: normalizeText((profile as any)?.nombres || (profile as any)?.nombre),
+            apellido: normalizeText((profile as any)?.apellidos || (profile as any)?.apellido),
+            fotoUrl: normalizeText((profile as any)?.fotoUrl),
+          };
+        }
+      }
+
+      setUser(sessionUser);
+    } catch {
+      setUser(null);
+    }
   }, []);
+
+  const loadNotifications = useCallback(async () => {
+    setLoadingNotifications(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setNotifications([]);
+        return;
+      }
+
+      const response = await fetch(apiUrl('/api/agenda/me/notificaciones?limit=120'), {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!(response.ok && payload?.success && Array.isArray(payload?.notificaciones))) {
+        setNotifications([]);
+        return;
+      }
+
+      const normalized = (payload.notificaciones as any[])
+        .map((item) =>
+          mapNotification({
+            id: item?.id,
+            tipo: item?.tipo,
+            titulo: item?.titulo,
+            contenido: item?.contenido,
+            leida: item?.leida,
+            createdAt: item?.createdAt,
+            data: item?.data,
+          })
+        )
+        .filter((item: NotificationItem) => Boolean(item.id))
+        .sort((a, b) => {
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bTime - aTime;
+        });
+      setNotifications(normalized);
+    } catch {
+      setNotifications([]);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current < MIN_REFRESH_INTERVAL_MS) {
+        return;
+      }
+      lastRefreshRef.current = now;
+      loadUser();
+      loadNotifications();
+    }, [loadNotifications, loadUser])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      const initSocket = async () => {
+        const token = await getAuthToken();
+        if (!mounted || !token) return;
+
+        const socket = io(BACKEND_URL, {
+          transports: ['websocket'],
+          auth: { token },
+        });
+        socketRef.current = socket;
+
+        socket.on('notificacion_nueva', (payload: any) => {
+          const next = mapNotification({
+            id: payload?.id,
+            tipo: payload?.tipo,
+            titulo: payload?.titulo,
+            contenido: payload?.contenido,
+            leida: payload?.leida,
+            createdAt: payload?.createdAt,
+            data: payload?.data,
+          });
+          if (!next.id) return;
+          setNotifications((prev) => {
+            const exists = prev.some((item) => item.id === next.id);
+            if (exists) {
+              return prev.map((item) => (item.id === next.id ? { ...item, ...next } : item));
+            }
+            return [next, ...prev];
+          });
+        });
+
+        socket.on('mensaje_nuevo', () => loadNotifications());
+        socket.on('cita_actualizada', () => loadNotifications());
+        socket.on('cita_cancelada', () => loadNotifications());
+        socket.on('cita_reprogramada', () => loadNotifications());
+      };
+
+      initSocket();
+      return () => {
+        mounted = false;
+        if (socketRef.current) {
+          socketRef.current.removeAllListeners();
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
+      };
+    }, [loadNotifications])
+  );
 
   const fullName = useMemo(() => getPatientDisplayName(user, 'Paciente'), [user]);
 
@@ -174,10 +373,18 @@ const PacienteNotificacionesScreen: React.FC = () => {
   }, [user]);
 
   const filtered = useMemo(() => {
-    if (activeFilter === 'todas') return notifications;
-    if (activeFilter === 'noleidas') return notifications.filter((n) => n.unread);
-    return notifications.filter((n) => n.type === activeFilter);
-  }, [activeFilter, notifications]);
+    const text = normalizeText(searchText).toLowerCase();
+    let base = notifications;
+    if (activeFilter === 'noleidas') {
+      base = notifications.filter((n) => n.unread);
+    } else if (activeFilter !== 'todas') {
+      base = notifications.filter((n) => n.type === activeFilter);
+    }
+    if (!text) return base;
+    return base.filter((item) => {
+      return item.title.toLowerCase().includes(text) || item.message.toLowerCase().includes(text);
+    });
+  }, [activeFilter, notifications, searchText]);
 
   const grouped = useMemo(() => {
     return sectionOrder.map((section) => ({
@@ -188,11 +395,54 @@ const PacienteNotificacionesScreen: React.FC = () => {
 
   const unreadCount = notifications.filter((n) => n.unread).length;
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((item) => ({ ...item, unread: false })));
-  };
+  const markAllRead = useCallback(async () => {
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(apiUrl('/api/agenda/me/notificaciones/leer-todas'), {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) {
+        Alert.alert('No se pudo marcar', payload?.message || 'Intenta nuevamente.');
+        return;
+      }
+      setNotifications((prev) => prev.map((item) => ({ ...item, unread: false })));
+    } catch {
+      Alert.alert('Error', 'No se pudieron marcar las notificaciones.');
+    }
+  }, []);
+
+  const markOneRead = useCallback(async (item: NotificationItem) => {
+    if (!item.unread) return;
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(apiUrl(`/api/agenda/me/notificaciones/${item.id}/leida`), {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) return;
+      setNotifications((prev) =>
+        prev.map((row) => (row.id === item.id ? { ...row, unread: false } : row))
+      );
+    } catch {
+      // noop
+    }
+  }, []);
 
   const handleNotificationAction = (item: NotificationItem) => {
+    markOneRead(item);
     if (item.type === 'mensajes') {
       navigation.navigate('PacienteChat');
       return;
@@ -205,8 +455,22 @@ const PacienteNotificacionesScreen: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+    await AsyncStorage.removeItem(LEGACY_TOKEN_KEY);
     await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(LEGACY_TOKEN_KEY);
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+      } else {
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_USER_STORAGE_KEY);
+      }
+    } catch {}
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
@@ -312,6 +576,8 @@ const PacienteNotificacionesScreen: React.FC = () => {
                 style={styles.searchInput}
                 placeholder={t('notif.searchPlaceholder')}
                 placeholderTextColor="#8aa7bf"
+                value={searchText}
+                onChangeText={setSearchText}
               />
             </View>
 
@@ -381,7 +647,9 @@ const PacienteNotificacionesScreen: React.FC = () => {
                   ? t('notif.today')
                   : group.section === 'AYER'
                   ? t('notif.yesterday')
-                  : t('notif.thisWeek')}
+                  : group.section === 'ESTA SEMANA'
+                  ? t('notif.thisWeek')
+                  : 'ANTERIOR'}
               </Text>
               {group.items.length === 0 ? null : group.items.map((item) => (
                 <TouchableOpacity
@@ -422,12 +690,18 @@ const PacienteNotificacionesScreen: React.FC = () => {
               ))}
             </View>
           ))}
+
+          {!loadingNotifications && filtered.length === 0 ? (
+            <Text style={styles.emptyListText}>No hay notificaciones para este filtro.</Text>
+          ) : null}
         </ScrollView>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>{t('notif.total')}: {notifications.length}</Text>
           <Text style={styles.footerText}>{t('notif.unread')}: {unreadCount}</Text>
-          <Text style={styles.footerText}>{t('notif.updated')}</Text>
+          <Text style={styles.footerText}>
+            {loadingNotifications ? 'Actualizando...' : t('notif.updated')}
+          </Text>
         </View>
       </View>
     </View>
@@ -594,6 +868,13 @@ const styles = StyleSheet.create({
   filtersDivider: { width: 1, height: 18, backgroundColor: '#d7e4f2', marginHorizontal: 4 },
 
   listWrap: { flex: 1, paddingHorizontal: 20, paddingTop: 12 },
+  emptyListText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    paddingVertical: 18,
+    textAlign: 'center',
+  },
   sectionWrap: { marginBottom: 14 },
   sectionLabel: {
     color: '#9bb1c7',
@@ -683,4 +964,5 @@ const styles = StyleSheet.create({
 });
 
 export default PacienteNotificacionesScreen;
+
 

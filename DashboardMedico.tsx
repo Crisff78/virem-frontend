@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -142,6 +142,7 @@ const EMPTY_DASHBOARD: DashboardPayload = {
   agendaHoy: [],
   expedientesRecientes: [],
 };
+const MIN_REFRESH_INTERVAL_MS = 12000;
 
 const parseJson = <T,>(raw: string | null): T | null => {
   if (!raw) return null;
@@ -340,6 +341,7 @@ const DashboardMedico: React.FC = () => {
   const [upcomingCitas, setUpcomingCitas] = useState<MedicoUpcomingCita[]>([]);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
   const [profileReady, setProfileReady] = useState(initialMedicoUi.hasSeed);
+  const lastRefreshRef = useRef(0);
 
   const loadDashboardData = useCallback(async (authToken: string) => {
     if (!authToken) {
@@ -421,7 +423,7 @@ const DashboardMedico: React.FC = () => {
     }
 
     try {
-      const response = await fetch(apiUrl('/api/users/me/citas?scope=upcoming&limit=20'), {
+      const response = await fetch(apiUrl('/api/agenda/me/citas?scope=upcoming&limit=20'), {
         method: 'GET',
         headers: { Authorization: `Bearer ${authToken}` },
       });
@@ -659,12 +661,13 @@ const DashboardMedico: React.FC = () => {
     }
   }, [loadDashboardData, loadUpcomingCitas]);
 
-  useEffect(() => {
-    loadMedicoProfile();
-  }, [loadMedicoProfile]);
-
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current < MIN_REFRESH_INTERVAL_MS) {
+        return;
+      }
+      lastRefreshRef.current = now;
       loadMedicoProfile();
     }, [loadMedicoProfile])
   );
@@ -1312,5 +1315,6 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, color: colors.viremDark, fontWeight: '600' },
 });
+
 
 

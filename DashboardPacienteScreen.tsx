@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -10,7 +10,6 @@ import {
   ScrollView,
   Image,
   TextInput,
-  ActivityIndicator,
   Easing,
   Platform,
 } from 'react-native';
@@ -40,6 +39,7 @@ const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
 const AUTH_TOKEN_KEY = 'authToken';
 const LEGACY_TOKEN_KEY = 'token';
+const MIN_REFRESH_INTERVAL_MS = 15000;
 
 const parseUser = (raw: string | null): User | null => {
   if (!raw) return null;
@@ -126,6 +126,15 @@ const formatRelativeIn = (value: string | null) => {
   return `en ${diffDay} dia(s)`;
 };
 
+const formatPrice = (value: number | null | undefined) => {
+  if (!Number.isFinite(value as number) || Number(value) <= 0) return 'No especificado';
+  return new Intl.NumberFormat('es-DO', {
+    style: 'currency',
+    currency: 'DOP',
+    maximumFractionDigits: 2,
+  }).format(Number(value));
+};
+
 const parseDateMs = (value: string | null | undefined) => {
   if (!value) return Number.POSITIVE_INFINITY;
   const ms = new Date(value).getTime();
@@ -183,6 +192,9 @@ type AppointmentCardProps = {
   detail: string;
   avatar: ImageSourcePropType;
   simple?: boolean;
+  showPostpone?: boolean;
+  postponeDisabled?: boolean;
+  postponeLabel?: string;
   onPostpone?: () => void;
   onDetails?: () => void;
 };
@@ -226,28 +238,40 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
   detail,
   avatar,
   simple = false,
+  showPostpone,
+  postponeDisabled = false,
+  postponeLabel = 'Posponer',
   onPostpone,
   onDetails,
-}) => (
-  <View style={styles.apptCard}>
-    <Image source={avatar} style={styles.apptAvatar} />
-    <View style={{ flex: 1 }}>
-      <Text style={styles.apptDoctor}>{doctor}</Text>
-      <Text style={styles.apptDetail}>{detail}</Text>
-    </View>
+}) => {
+  const shouldRenderPostpone = typeof showPostpone === 'boolean' ? showPostpone : !simple;
+  return (
+    <View style={styles.apptCard}>
+      <Image source={avatar} style={styles.apptAvatar} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.apptDoctor}>{doctor}</Text>
+        <Text style={styles.apptDetail}>{detail}</Text>
+      </View>
 
-    <View style={styles.apptBtns}>
-      {!simple && (
-        <TouchableOpacity style={styles.smallBtnGray} onPress={onPostpone}>
-          <Text style={styles.smallBtnGrayText}>Posponer</Text>
+      <View style={styles.apptBtns}>
+        {shouldRenderPostpone ? (
+          <TouchableOpacity
+            style={[styles.smallBtnGray, postponeDisabled && styles.smallBtnGrayDisabled]}
+            onPress={onPostpone}
+            disabled={postponeDisabled}
+          >
+            <Text style={[styles.smallBtnGrayText, postponeDisabled && styles.smallBtnGrayTextDisabled]}>
+              {postponeLabel}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity style={styles.smallBtnBlue} onPress={onDetails}>
+          <Text style={styles.smallBtnBlueText}>Detalles</Text>
         </TouchableOpacity>
-      )}
-      <TouchableOpacity style={styles.smallBtnBlue} onPress={onDetails}>
-        <Text style={styles.smallBtnBlueText}>Detalles</Text>
-      </TouchableOpacity>
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 const DocRow: React.FC<DocRowProps> = ({ icon, title, sub, onDownload }) => (
   <View style={styles.docRow}>
@@ -341,7 +365,11 @@ const DashboardPacienteScreen: React.FC = () => {
   const [testStatus, setTestStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [testStatusText, setTestStatusText] = useState('Aún no se ha realizado la prueba.');
   const [chatReply, setChatReply] = useState('');
+  const [workingCitaId, setWorkingCitaId] = useState('');
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedCita, setSelectedCita] = useState<CitaItem | null>(null);
   const chatAnim = useRef(new Animated.Value(0)).current;
+  const lastRefreshRef = useRef(0);
 
   // Cargar y sincronizar usuario paciente desde storage + backend.
   const loadUser = useCallback(async () => {
@@ -488,11 +516,11 @@ const DashboardPacienteScreen: React.FC = () => {
         setLoadingCitas(true);
         try {
           const [upcomingResponse, historyResponse] = await Promise.all([
-            fetch(apiUrl('/api/users/me/citas?scope=upcoming&limit=10'), {
+            fetch(apiUrl('/api/agenda/me/citas?scope=upcoming&limit=10'), {
               method: 'GET',
               headers: { Authorization: `Bearer ${authToken}` },
             }),
-            fetch(apiUrl('/api/users/me/citas?scope=history&limit=10'), {
+            fetch(apiUrl('/api/agenda/me/citas?scope=history&limit=10'), {
               method: 'GET',
               headers: { Authorization: `Bearer ${authToken}` },
             }),
@@ -540,12 +568,13 @@ const DashboardPacienteScreen: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    loadUser();
-  }, [loadUser]);
-
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current < MIN_REFRESH_INTERVAL_MS) {
+        return;
+      }
+      lastRefreshRef.current = now;
       loadUser();
     }, [loadUser])
   );
@@ -592,6 +621,20 @@ const DashboardPacienteScreen: React.FC = () => {
     }
     return order;
   }, [upcomingCitas, historyCitas]);
+  const hasFrequentDoctors = frequentDoctors.length >= 2;
+
+  const isCitaPostponable = useCallback((cita: CitaItem | null | undefined) => {
+    if (!cita?.citaid) return false;
+    const estado = normalizeString(cita.estado || '').toLowerCase();
+    const isClosed =
+      estado.includes('cancel') ||
+      estado.includes('complet') ||
+      estado.includes('finaliz') ||
+      estado.includes('realiz');
+    if (isClosed) return false;
+    const startMs = parseDateMs(cita.fechaHoraInicio);
+    return Number.isFinite(startMs) && startMs > Date.now();
+  }, []);
 
   const primaryDoctorName = normalizeString(primaryCita?.medico?.nombreCompleto || '');
   const primaryDoctorSpec = normalizeString(primaryCita?.medico?.especialidad || 'Medicina General');
@@ -709,7 +752,24 @@ const DashboardPacienteScreen: React.FC = () => {
     setChatReply('');
   };
 
+  const openCitaDetails = (cita: CitaItem) => {
+    setSelectedCita(cita);
+    setDetailsOpen(true);
+  };
+
   const handlePostponeCita = async (cita: CitaItem) => {
+    const citaId = normalizeString(cita?.citaid);
+    if (!citaId) {
+      Alert.alert('No disponible', 'Esta cita no tiene un identificador válido para posponer.');
+      return;
+    }
+    if (workingCitaId === citaId) return;
+    if (!isCitaPostponable(cita)) {
+      Alert.alert('No disponible', 'Esta cita ya no puede posponerse por su estado o fecha.');
+      return;
+    }
+
+    setWorkingCitaId(citaId);
     try {
       const token = await getAuthToken();
       if (!token) {
@@ -718,12 +778,19 @@ const DashboardPacienteScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl(`/api/users/me/citas/${cita.citaid}/postpone`), {
+      const currentStart = cita?.fechaHoraInicio ? new Date(cita.fechaHoraInicio) : new Date();
+      const nextStart = new Date(currentStart.getTime() + 24 * 60 * 60 * 1000);
+
+      const response = await fetch(apiUrl(`/api/agenda/me/citas/${citaId}/reprogramar`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({
+          fechaHoraInicio: nextStart.toISOString(),
+          motivo: 'Reprogramada desde dashboard paciente',
+        }),
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload?.success) {
@@ -732,9 +799,12 @@ const DashboardPacienteScreen: React.FC = () => {
       }
 
       Alert.alert('Cita pospuesta', `Nueva fecha: ${formatDateTime(payload?.cita?.fechaHoraInicio || null)}`);
+      setDetailsOpen(false);
       loadUser();
     } catch {
       Alert.alert('Error', 'No se pudo conectar para posponer la cita.');
+    } finally {
+      setWorkingCitaId('');
     }
   };
 
@@ -954,7 +1024,7 @@ const DashboardPacienteScreen: React.FC = () => {
         </View>
 
         <View style={styles.twoCols}>
-          <View style={styles.colLeft}>
+          <View style={[styles.colLeft, styles.colLeftFull]}>
             <View style={styles.rowBetween}>
               <Text style={styles.sectionTitle}>Citas pendientes</Text>
               <TouchableOpacity onPress={() => navigation.navigate('PacienteCitas')}>
@@ -969,7 +1039,11 @@ const DashboardPacienteScreen: React.FC = () => {
                   doctor={normalizeString(cita?.medico?.nombreCompleto || 'Especialista')}
                   detail={`${normalizeString(cita?.medico?.especialidad || 'Medicina General')} · ${formatDateTime(cita.fechaHoraInicio)}`}
                   avatar={getDoctorAvatar(cita)}
-                  simple={index % 2 !== 0}
+                  showPostpone={isCitaPostponable(cita)}
+                  postponeDisabled={workingCitaId === normalizeString(cita.citaid)}
+                  postponeLabel={
+                    workingCitaId === normalizeString(cita.citaid) ? 'Posponiendo...' : 'Posponer'
+                  }
                   onPostpone={() =>
                     Alert.alert(
                       'Posponer cita',
@@ -980,14 +1054,7 @@ const DashboardPacienteScreen: React.FC = () => {
                       ]
                     )
                   }
-                  onDetails={() =>
-                    Alert.alert(
-                      'Detalle de cita',
-                      `${normalizeString(cita?.medico?.nombreCompleto || 'Especialista')}\n${normalizeString(
-                        cita?.medico?.especialidad || 'Medicina General'
-                      )}\n${formatDateTime(cita.fechaHoraInicio)}`
-                    )
-                  }
+                  onDetails={() => openCitaDetails(cita)}
                 />
               ))
             ) : (
@@ -1000,12 +1067,10 @@ const DashboardPacienteScreen: React.FC = () => {
               </View>
             )}
           </View>
-
-          <View style={styles.colRight} />
         </View>
 
         <View style={styles.twoCols}>
-          <View style={styles.colLeft}>
+          <View style={[styles.colLeft, !hasFrequentDoctors && styles.colLeftFull]}>
             <Text style={styles.sectionTitle}>Historial reciente de consultas</Text>
             <View style={styles.listCard}>
               {historyRows.length ? (
@@ -1035,11 +1100,11 @@ const DashboardPacienteScreen: React.FC = () => {
             </View>
           </View>
 
-          <View style={styles.colRight}>
-            <Text style={styles.sectionTitle}>Doctores frecuentes</Text>
-            <View style={styles.doctorsGrid}>
-              {frequentDoctors.length ? (
-                frequentDoctors.map((item, index) => (
+          {hasFrequentDoctors ? (
+            <View style={styles.colRight}>
+              <Text style={styles.sectionTitle}>Doctores frecuentes</Text>
+              <View style={styles.doctorsGrid}>
+                {frequentDoctors.map((item, index) => (
                   <DoctorCard
                     key={`${item.name}-${index}`}
                     name={item.name}
@@ -1049,14 +1114,10 @@ const DashboardPacienteScreen: React.FC = () => {
                       navigation.navigate('EspecialistasPorEspecialidad', { specialty: item.spec })
                     }
                   />
-                ))
-              ) : (
-                <View style={styles.emptyStateCard}>
-                  <Text style={styles.emptyStateText}>Aun no hay doctores frecuentes.</Text>
-                </View>
-              )}
+                ))}
+              </View>
             </View>
-          </View>
+          ) : null}
         </View>
 
         <View style={styles.summaryCard}>
@@ -1212,6 +1273,125 @@ const DashboardPacienteScreen: React.FC = () => {
           </View>
         </>
       ) : null}
+
+      <Modal
+        visible={detailsOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDetailsOpen(false)}
+      >
+        <View style={styles.detailsOverlay}>
+          <View style={styles.detailsModal}>
+            <View style={styles.detailsHead}>
+              <Text style={styles.detailsTitle}>Detalle de consulta</Text>
+              <TouchableOpacity onPress={() => setDetailsOpen(false)}>
+                <MaterialIcons name="close" size={22} color={colors.muted} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedCita ? (
+              <>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Doctor</Text>
+                  <Text style={styles.detailsValue}>
+                    {normalizeString(selectedCita?.medico?.nombreCompleto || 'Especialista')}
+                  </Text>
+                </View>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Especialidad</Text>
+                  <Text style={styles.detailsValue}>
+                    {normalizeString(selectedCita?.medico?.especialidad || 'Medicina General')}
+                  </Text>
+                </View>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Inicio</Text>
+                  <Text style={styles.detailsValue}>
+                    {formatDateTime(selectedCita.fechaHoraInicio) || 'Sin horario'}
+                  </Text>
+                </View>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Fin</Text>
+                  <Text style={styles.detailsValue}>
+                    {formatDateTime(selectedCita.fechaHoraFin) || 'Sin horario'}
+                  </Text>
+                </View>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Duración</Text>
+                  <Text style={styles.detailsValue}>
+                    {Number.isFinite(selectedCita.duracionMin) ? `${selectedCita.duracionMin} min` : 'No especificada'}
+                  </Text>
+                </View>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Estado</Text>
+                  <Text style={styles.detailsValue}>{normalizeString(selectedCita.estado || 'Pendiente')}</Text>
+                </View>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Precio</Text>
+                  <Text style={styles.detailsValue}>{formatPrice(selectedCita.precio)}</Text>
+                </View>
+                <View style={styles.detailsNoteBox}>
+                  <Text style={styles.detailsLabel}>Nota</Text>
+                  <Text style={styles.detailsNoteText}>
+                    {normalizeString(selectedCita.nota || '') || 'Sin nota clínica registrada.'}
+                  </Text>
+                </View>
+
+                <View style={styles.detailsActions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.detailsSecondaryBtn,
+                      (!isCitaPostponable(selectedCita) || workingCitaId === normalizeString(selectedCita.citaid)) &&
+                        styles.detailsSecondaryBtnDisabled,
+                    ]}
+                    disabled={
+                      !isCitaPostponable(selectedCita) ||
+                      workingCitaId === normalizeString(selectedCita.citaid)
+                    }
+                    onPress={() =>
+                      Alert.alert(
+                        'Posponer cita',
+                        `Se movera 24 horas hacia adelante.\nCita actual: ${formatDateTime(selectedCita.fechaHoraInicio)}`,
+                        [
+                          { text: 'Cancelar', style: 'cancel' },
+                          { text: 'Posponer', onPress: () => handlePostponeCita(selectedCita) },
+                        ]
+                      )
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.detailsSecondaryBtnText,
+                        (!isCitaPostponable(selectedCita) || workingCitaId === normalizeString(selectedCita.citaid)) &&
+                          styles.detailsSecondaryBtnTextDisabled,
+                      ]}
+                    >
+                      {workingCitaId === normalizeString(selectedCita.citaid)
+                        ? 'Posponiendo...'
+                        : 'Posponer 24h'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.detailsPrimaryBtn}
+                    onPress={() => {
+                      setDetailsOpen(false);
+                      if (selectedCita?.citaid) {
+                        navigation.navigate('SalaEsperaVirtualPaciente', { citaId: selectedCita.citaid });
+                      } else {
+                        navigation.navigate('SalaEsperaVirtualPaciente');
+                      }
+                    }}
+                  >
+                    <Text style={styles.detailsPrimaryBtnText}>Ir a videollamada</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.detailsNoteText}>No se encontró información de la cita.</Text>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={prepOpen} transparent animationType="fade" onRequestClose={() => setPrepOpen(false)}>
         <View style={styles.prepOverlay}>
@@ -1547,6 +1727,7 @@ const styles = StyleSheet.create({
   },
   colLeft: { flex: 2 },
   colRight: { flex: 1.2 },
+  colLeftFull: { flex: 1 },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 
   apptCard: {
@@ -1570,7 +1751,9 @@ const styles = StyleSheet.create({
   apptBtns: { flexDirection: 'row', gap: 8 },
 
   smallBtnGray: { backgroundColor: '#f1f5f9', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12 },
+  smallBtnGrayDisabled: { backgroundColor: '#e2e8f0' },
   smallBtnGrayText: { color: colors.muted, fontWeight: '900', fontSize: 12 },
+  smallBtnGrayTextDisabled: { color: '#94a3b8' },
   smallBtnBlue: { backgroundColor: 'rgba(19,127,236,0.12)', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12 },
   smallBtnBlueText: { color: colors.primary, fontWeight: '900', fontSize: 12 },
 
@@ -1751,6 +1934,110 @@ const styles = StyleSheet.create({
   summaryDate: { color: '#fff', opacity: 0.8, fontWeight: '800', fontSize: 11, backgroundColor: 'rgba(255,255,255,0.10)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   summaryText: { color: colors.light, fontWeight: '600', fontSize: 12, marginTop: 10, lineHeight: 18 },
 
+  detailsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 25, 49, 0.42)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  detailsModal: {
+    width: '100%',
+    maxWidth: 640,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#d7e4f2',
+    padding: 18,
+  },
+  detailsHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  detailsTitle: {
+    color: colors.dark,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#edf2f8',
+  },
+  detailsLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  detailsValue: {
+    color: colors.dark,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+    flexShrink: 1,
+  },
+  detailsNoteBox: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#dce8f5',
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: '#f8fbff',
+    gap: 6,
+  },
+  detailsNoteText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  detailsActions: {
+    marginTop: 14,
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+    gap: 10,
+  },
+  detailsPrimaryBtn: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  detailsPrimaryBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  detailsSecondaryBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d6e3f0',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    backgroundColor: '#f8fbff',
+  },
+  detailsSecondaryBtnDisabled: {
+    backgroundColor: '#e2e8f0',
+    borderColor: '#e2e8f0',
+  },
+  detailsSecondaryBtnText: {
+    color: colors.blue,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  detailsSecondaryBtnTextDisabled: {
+    color: '#94a3b8',
+  },
+
   prepOverlay: {
     flex: 1,
     backgroundColor: 'rgba(10, 25, 49, 0.42)',
@@ -1923,6 +2210,7 @@ const styles = StyleSheet.create({
 });
 
 export default DashboardPacienteScreen;
+
 
 
 

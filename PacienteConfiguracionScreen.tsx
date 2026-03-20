@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   View,
@@ -15,7 +15,7 @@ import {
 import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import type { RootStackParamList } from './navigation/types';
@@ -49,6 +49,13 @@ const parseUser = (raw: string | null): User | null => {
   }
 };
 
+const sanitizeFotoUrl = (value: unknown) => {
+  const clean = String(value || '').trim();
+  if (!clean) return '';
+  if (clean.toLowerCase().startsWith('blob:')) return '';
+  return clean;
+};
+
 const PacienteConfiguracionScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { language: appLanguage, setLanguage, t, tx } = useLanguage();
@@ -68,53 +75,53 @@ const PacienteConfiguracionScreen: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        if (Platform.OS === 'web') {
-          const webUser = ensurePatientSessionUser(parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY)));
-          if (webUser) {
-            setUser(webUser);
-            return;
-          }
+  const loadUser = useCallback(async () => {
+    try {
+      if (Platform.OS === 'web') {
+        const webUser = ensurePatientSessionUser(parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY)));
+        if (webUser) {
+          setUser(webUser);
         }
+      }
 
-        const secureUser = ensurePatientSessionUser(
-          parseUser(await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY))
-        );
-        if (secureUser) {
-          setUser(secureUser);
-          return;
-        }
-
+      const secureUser = ensurePatientSessionUser(
+        parseUser(await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY))
+      );
+      if (secureUser) {
+        setUser(secureUser);
+      } else {
         const asyncUser = ensurePatientSessionUser(parseUser(await AsyncStorage.getItem(STORAGE_KEY)));
         setUser(asyncUser);
-
-        const savedSettingsRaw = await AsyncStorage.getItem(SETTINGS_KEY);
-        if (savedSettingsRaw) {
-          const saved = JSON.parse(savedSettingsRaw) as {
-            timeFormat?: string;
-            timeZone?: string;
-          };
-          if (saved.timeFormat) setTimeFormat(saved.timeFormat);
-          if (saved.timeZone) setTimeZone(saved.timeZone);
-        } else if (Platform.OS === 'web') {
-          const detectedZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-          if (detectedZone === 'America/Santo_Domingo') {
-            setTimeZone('(GMT-04:00) Santo Domingo');
-          } else if (detectedZone === 'America/Bogota') {
-            setTimeZone('(GMT-05:00) Bogota');
-          } else if (detectedZone === 'America/Mexico_City') {
-            setTimeZone('(GMT-06:00) Ciudad de Mexico');
-          }
-        }
-      } catch {
-        setUser(null);
       }
-    };
 
-    loadUser();
+      const savedSettingsRaw = await AsyncStorage.getItem(SETTINGS_KEY);
+      if (savedSettingsRaw) {
+        const saved = JSON.parse(savedSettingsRaw) as {
+          timeFormat?: string;
+          timeZone?: string;
+        };
+        if (saved.timeFormat) setTimeFormat(saved.timeFormat);
+        if (saved.timeZone) setTimeZone(saved.timeZone);
+      } else if (Platform.OS === 'web') {
+        const detectedZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (detectedZone === 'America/Santo_Domingo') {
+          setTimeZone('(GMT-04:00) Santo Domingo');
+        } else if (detectedZone === 'America/Bogota') {
+          setTimeZone('(GMT-05:00) Bogota');
+        } else if (detectedZone === 'America/Mexico_City') {
+          setTimeZone('(GMT-06:00) Ciudad de Mexico');
+        }
+      }
+    } catch {
+      setUser(null);
+    }
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUser();
+    }, [loadUser])
+  );
 
   const fullName = useMemo(() => getPatientDisplayName(user, 'Paciente'), [user]);
 
@@ -124,11 +131,13 @@ const PacienteConfiguracionScreen: React.FC = () => {
   }, [user]);
 
   const avatarSource: ImageSourcePropType = useMemo(() => {
-    if (user?.fotoUrl && user.fotoUrl.trim().length > 0) {
-      return { uri: user.fotoUrl.trim() };
+    const fotoUrl = sanitizeFotoUrl(user?.fotoUrl);
+    if (fotoUrl) {
+      return { uri: fotoUrl };
     }
     return DefaultAvatar;
-  }, [user]);
+  }, [user?.fotoUrl]);
+  const hasProfilePhoto = useMemo(() => Boolean(sanitizeFotoUrl(user?.fotoUrl)), [user?.fotoUrl]);
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem('token');
@@ -268,6 +277,9 @@ const PacienteConfiguracionScreen: React.FC = () => {
             <Image source={avatarSource} style={styles.userAvatar} />
             <Text style={styles.userName}>{fullName}</Text>
             <Text style={styles.userPlan}>{planLabel}</Text>
+            {!hasProfilePhoto ? (
+              <Text style={styles.hintText}>No tienes foto. Ve a Perfil para agregarla.</Text>
+            ) : null}
           </View>
 
           <View style={styles.menu}>
@@ -663,6 +675,7 @@ const styles = StyleSheet.create({
   },
   userName: { fontWeight: '800', color: colors.dark, fontSize: 14 },
   userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
+  hintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
 
   menu: {
     marginTop: 10,
@@ -908,4 +921,5 @@ const styles = StyleSheet.create({
 });
 
 export default PacienteConfiguracionScreen;
+
 

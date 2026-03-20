@@ -32,6 +32,7 @@ const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
 const AUTH_TOKEN_KEY = 'authToken';
 const LEGACY_TOKEN_KEY = 'token';
+const MIN_REFRESH_INTERVAL_MS = 15000;
 
 const colors = {
   primary: '#137fec',
@@ -193,6 +194,7 @@ const PacientePerfilScreen: React.FC = () => {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [bloodTypeOpen, setBloodTypeOpen] = useState(false);
   const selectingBloodTypeRef = useRef(false);
+  const lastRefreshRef = useRef(0);
   const [form, setForm] = useState<ProfileForm>({
     nombres: '',
     apellidos: '',
@@ -320,12 +322,13 @@ const PacientePerfilScreen: React.FC = () => {
     }
   }, [getAuthToken]);
 
-  useEffect(() => {
-    loadUser();
-  }, [loadUser]);
-
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current < MIN_REFRESH_INTERVAL_MS) {
+        return;
+      }
+      lastRefreshRef.current = now;
       loadUser();
     }, [loadUser])
   );
@@ -377,6 +380,7 @@ const PacientePerfilScreen: React.FC = () => {
     }
     return DefaultAvatar;
   }, [user?.fotoUrl]);
+  const hasProfilePhoto = useMemo(() => Boolean(sanitizeFotoUrl(user?.fotoUrl)), [user?.fotoUrl]);
 
   const updateField = <K extends keyof ProfileForm>(field: K, value: ProfileForm[K]) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -579,6 +583,9 @@ const PacientePerfilScreen: React.FC = () => {
             <Image source={userAvatarSource} style={styles.userAvatar} />
             <Text style={styles.userName}>{fullName}</Text>
             <Text style={styles.userPlan}>{planLabel}</Text>
+            {!hasProfilePhoto ? (
+              <Text style={styles.hintText}>No tienes foto. Ve a Perfil para agregarla.</Text>
+            ) : null}
           </View>
 
           <View style={styles.menu}>
@@ -630,6 +637,14 @@ const PacientePerfilScreen: React.FC = () => {
             >
               <MaterialIcons name="account-circle" size={20} color={colors.primary} />
               <Text style={[styles.menuText, styles.menuTextActive]}>{t('menu.profile')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteConfiguracion')}
+            >
+              <MaterialIcons name="settings" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -958,6 +973,7 @@ const styles = StyleSheet.create({
   userAvatar: { width: 76, height: 76, borderRadius: 76, marginBottom: 10, borderWidth: 4, borderColor: '#f5f7fb' },
   userName: { fontWeight: '800', color: colors.dark, fontSize: 14, textAlign: 'center' },
   userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
+  hintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   menu: {
     marginTop: 10,
     gap: 6,
@@ -1176,6 +1192,7 @@ const styles = StyleSheet.create({
 });
 
 export default PacientePerfilScreen;
+
 
 
 

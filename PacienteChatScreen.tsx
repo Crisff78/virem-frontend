@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   Platform,
@@ -17,10 +17,11 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { io, Socket } from 'socket.io-client';
 
 import { useLanguage } from './localization/LanguageContext';
 import type { RootStackParamList } from './navigation/types';
-import { apiUrl } from './config/backend';
+import { apiUrl, BACKEND_URL } from './config/backend';
 import { ensurePatientSessionUser, getPatientDisplayName } from './utils/patientSession';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
@@ -30,7 +31,7 @@ const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
 const AUTH_TOKEN_KEY = 'authToken';
 const LEGACY_TOKEN_KEY = 'token';
-const CHAT_STORAGE_PREFIX = 'patientChatByDoctor';
+const MIN_REFRESH_INTERVAL_MS = 12000;
 
 type User = {
   id?: number | string;
@@ -54,22 +55,14 @@ type Message = {
   dateLabel?: string;
 };
 
-type CitaItem = {
-  citaid?: string;
-  fechaHoraInicio?: string | null;
-  medico?: {
-    medicoid?: string;
-    nombreCompleto?: string;
-    especialidad?: string;
-    fotoUrl?: string | null;
-  };
-};
-
 type ChatContact = {
   id: string;
+  doctorId: string;
   name: string;
   specialty: string;
   avatarUrl: string;
+  citaId: string;
+  unreadCount: number;
   nextDateMs: number;
   timeLabel: string;
 };
@@ -157,17 +150,16 @@ const PacienteChatScreen: React.FC = () => {
 
   const [loadingUser, setLoadingUser] = useState(true);
   const [loadingContacts, setLoadingContacts] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [contacts, setContacts] = useState<ChatContact[]>([]);
   const [searchText, setSearchText] = useState('');
   const [reply, setReply] = useState('');
   const [selectedChatId, setSelectedChatId] = useState('');
   const [messagesByChat, setMessagesByChat] = useState<Record<string, Message[]>>({});
-
-  const chatStorageKey = useMemo(() => {
-    const idSeed = normalizeText(user?.usuarioid || user?.id || user?.email).toLowerCase();
-    return `${CHAT_STORAGE_PREFIX}:${idSeed || 'default'}`;
-  }, [user?.email, user?.id, user?.usuarioid]);
+  const socketRef = useRef<Socket | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRefreshRef = useRef(0);
 
   const loadUser = useCallback(async () => {
     setLoadingUser(true);
@@ -217,53 +209,44 @@ const PacienteChatScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl('/api/users/me/citas?scope=all&limit=100'), {
+      const response = await fetch(apiUrl('/api/agenda/me/conversaciones?limit=120'), {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
       });
       const payload = await response.json().catch(() => null);
-      if (!(response.ok && payload?.success && Array.isArray(payload?.citas))) {
+      if (!(response.ok && payload?.success && Array.isArray(payload?.conversaciones))) {
         setContacts([]);
         return;
       }
 
-      const byDoctor = new Map<string, ChatContact>();
-      for (const cita of payload.citas as CitaItem[]) {
-        const doctorId = normalizeText(cita?.medico?.medicoid);
-        const doctorName = normalizeText(cita?.medico?.nombreCompleto || 'Especialista');
-        const doctorKey = doctorId || `doctor:${doctorName.toLowerCase()}`;
-        if (!doctorKey) continue;
-
-        const nextDateMs = parseDateMs(cita?.fechaHoraInicio || null);
-        const current = byDoctor.get(doctorKey);
-        if (!current || nextDateMs < current.nextDateMs) {
-          byDoctor.set(doctorKey, {
-            id: doctorKey,
-            name: doctorName || 'Especialista',
-            specialty: normalizeText(cita?.medico?.especialidad || 'Medicina General') || 'Medicina General',
-            avatarUrl: sanitizeFotoUrl(cita?.medico?.fotoUrl),
+      const routeDoctorId = normalizeText(route.params?.doctorId);
+      const routeAvatarUrl = sanitizeFotoUrl(route.params?.doctorAvatarUrl);
+      const contactList = (payload.conversaciones as any[])
+        .map((conversation) => {
+          const conversationId = normalizeText(conversation?.conversacionId);
+          const citaId = normalizeText(conversation?.citaId);
+          if (!conversationId || !citaId) return null;
+          const nextDateMs = parseDateMs(conversation?.cita?.fechaHoraInicio || null);
+          const doctorId = normalizeText(conversation?.medico?.medicoid);
+          const fallbackAvatar = routeDoctorId && doctorId === routeDoctorId ? routeAvatarUrl : '';
+          return {
+            id: conversationId,
+            doctorId,
+            name: normalizeText(conversation?.medico?.nombreCompleto || 'Especialista') || 'Especialista',
+            specialty:
+              normalizeText(conversation?.medico?.especialidad || 'Medicina General') || 'Medicina General',
+            avatarUrl: fallbackAvatar,
+            citaId,
+            unreadCount: Number(conversation?.unreadCount || 0),
             nextDateMs,
             timeLabel: formatTimeLabel(nextDateMs),
-          });
-        }
-      }
-
-      const contactList = Array.from(byDoctor.values()).sort((a, b) => a.nextDateMs - b.nextDateMs);
-      const routeDoctorId = normalizeText(route.params?.doctorId);
-      const routeDoctorName = normalizeText(route.params?.doctorName);
-      if (routeDoctorName) {
-        const hasRouteContact = contactList.some((c) => c.id === routeDoctorId || c.name.toLowerCase() === routeDoctorName.toLowerCase());
-        if (!hasRouteContact) {
-          contactList.unshift({
-            id: routeDoctorId || `doctor:${routeDoctorName.toLowerCase()}`,
-            name: routeDoctorName,
-            specialty: 'Medicina General',
-            avatarUrl: sanitizeFotoUrl(route.params?.doctorAvatarUrl),
-            nextDateMs: Date.now(),
-            timeLabel: 'Nuevo chat',
-          });
-        }
-      }
+          } as ChatContact;
+        })
+        .filter((row: ChatContact | null): row is ChatContact => Boolean(row))
+        .sort((a, b) => {
+          if (a.unreadCount !== b.unreadCount) return b.unreadCount - a.unreadCount;
+          return a.nextDateMs - b.nextDateMs;
+        });
 
       setContacts(contactList);
     } catch {
@@ -271,35 +254,79 @@ const PacienteChatScreen: React.FC = () => {
     } finally {
       setLoadingContacts(false);
     }
-  }, [route.params?.doctorAvatarUrl, route.params?.doctorId, route.params?.doctorName]);
+  }, [route.params?.doctorAvatarUrl, route.params?.doctorId]);
+
+  const scheduleContactsReload = useCallback(() => {
+    if (refreshTimerRef.current) return;
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      loadContacts();
+    }, 500);
+  }, [loadContacts]);
 
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current < MIN_REFRESH_INTERVAL_MS) {
+        return;
+      }
+      lastRefreshRef.current = now;
       loadUser();
       loadContacts();
     }, [loadContacts, loadUser])
   );
 
-  useEffect(() => {
-    const loadStoredMessages = async () => {
-      try {
-        const raw =
-          Platform.OS === 'web'
-            ? localStorage.getItem(chatStorageKey)
-            : await AsyncStorage.getItem(chatStorageKey);
-        if (raw) {
-          const parsed = JSON.parse(raw) as Record<string, Message[]>;
-          setMessagesByChat(parsed || {});
-        } else {
-          setMessagesByChat({});
-        }
-      } catch {
-        setMessagesByChat({});
-      }
-    };
+  const loadMessages = useCallback(async (conversationId: string) => {
+    const cleanConversationId = normalizeText(conversationId);
+    if (!cleanConversationId) return;
 
-    loadStoredMessages();
-  }, [chatStorageKey]);
+    setLoadingMessages(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(
+        apiUrl(`/api/agenda/me/conversaciones/${cleanConversationId}/mensajes?limit=120`),
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const payload = await response.json().catch(() => null);
+      if (!(response.ok && payload?.success && Array.isArray(payload?.mensajes))) {
+        return;
+      }
+
+      const normalized = (payload.mensajes as any[]).map((message: any) => {
+        const sender = normalizeText(message?.emisorTipo).toLowerCase();
+        const from = sender === 'paciente' ? 'me' : 'other';
+        const time = formatTimeLabel(parseDateMs(message?.createdAt));
+        return {
+          id: normalizeText(message?.mensajeId || `${Date.now()}-${Math.random()}`),
+          from,
+          text: normalizeText(message?.contenido),
+          time,
+        } as Message;
+      });
+
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [cleanConversationId]: normalized,
+      }));
+
+      await fetch(apiUrl(`/api/agenda/me/conversaciones/${cleanConversationId}/leido`), {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      }).catch(() => null);
+    } catch {
+      // noop
+    } finally {
+      setLoadingMessages(false);
+    }
+  }, []);
 
   useEffect(() => {
     const routeDoctorId = normalizeText(route.params?.doctorId);
@@ -311,6 +338,11 @@ const PacienteChatScreen: React.FC = () => {
     }
 
     if (routeDoctorId) {
+      const byDoctorId = contacts.find((c) => c.doctorId === routeDoctorId);
+      if (byDoctorId) {
+        setSelectedChatId(byDoctorId.id);
+        return;
+      }
       const byId = contacts.find((c) => c.id === routeDoctorId);
       if (byId) {
         setSelectedChatId(byId.id);
@@ -332,19 +364,66 @@ const PacienteChatScreen: React.FC = () => {
     }
   }, [contacts, route.params?.doctorId, route.params?.doctorName, selectedChatId]);
 
-  const persistMessages = useCallback(
-    async (map: Record<string, Message[]>) => {
-      const raw = JSON.stringify(map);
-      try {
-        await AsyncStorage.setItem(chatStorageKey, raw);
-      } catch {}
-      if (Platform.OS === 'web') {
-        try {
-          localStorage.setItem(chatStorageKey, raw);
-        } catch {}
-      }
-    },
-    [chatStorageKey]
+  useEffect(() => {
+    if (!selectedChatId) return;
+    loadMessages(selectedChatId);
+  }, [loadMessages, selectedChatId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      const initSocket = async () => {
+        const token = await getAuthToken();
+        if (!mounted || !token) return;
+
+        const socket = io(BACKEND_URL, {
+          transports: ['websocket'],
+          auth: { token },
+        });
+        socketRef.current = socket;
+
+        socket.on('mensaje_nuevo', (payload: any) => {
+          const conversationId = normalizeText(payload?.conversacionId);
+          if (!conversationId) return;
+          const rawMessage = payload?.mensaje;
+          if (conversationId === selectedChatId && rawMessage) {
+            const sender = normalizeText(rawMessage?.emisorTipo).toLowerCase();
+            const from = sender === 'paciente' ? 'me' : 'other';
+            const createdMs = parseDateMs(rawMessage?.createdAt);
+            const nextMessage: Message = {
+              id: normalizeText(rawMessage?.mensajeId || `${Date.now()}-${Math.random()}`),
+              from,
+              text: normalizeText(rawMessage?.contenido),
+              time: formatTimeLabel(createdMs),
+            };
+            setMessagesByChat((prev) => ({
+              ...prev,
+              [conversationId]: [...(prev[conversationId] || []), nextMessage],
+            }));
+          }
+          scheduleContactsReload();
+          if (conversationId === selectedChatId) {
+            loadMessages(conversationId);
+          }
+        });
+        socket.on('cita_actualizada', () => scheduleContactsReload());
+        socket.on('cita_reprogramada', () => scheduleContactsReload());
+      };
+
+      initSocket();
+      return () => {
+        mounted = false;
+        if (socketRef.current) {
+          socketRef.current.removeAllListeners();
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
+        if (refreshTimerRef.current) {
+          clearTimeout(refreshTimerRef.current);
+          refreshTimerRef.current = null;
+        }
+      };
+    }, [loadMessages, scheduleContactsReload, selectedChatId])
   );
 
   const fullName = useMemo(() => getPatientDisplayName(user, 'Paciente'), [user]);
@@ -355,6 +434,7 @@ const PacienteChatScreen: React.FC = () => {
   }, [user?.plan]);
 
   const userAvatarSource: ImageSourcePropType = useMemo(() => resolveAvatarSource(user?.fotoUrl), [user?.fotoUrl]);
+  const hasProfilePhoto = useMemo(() => Boolean(sanitizeFotoUrl(user?.fotoUrl)), [user?.fotoUrl]);
 
   const filteredContacts = useMemo(() => {
     const query = normalizeText(searchText).toLowerCase();
@@ -391,26 +471,48 @@ const PacienteChatScreen: React.FC = () => {
     const text = reply.trim();
     if (!text || !selectedChat) return;
 
-    const timeLabel = new Intl.DateTimeFormat('es-DO', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date());
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        return;
+      }
 
-    const nextMessage: Message = {
-      id: `out-${Date.now()}`,
-      from: 'me',
-      text,
-      time: timeLabel,
-    };
+      const response = await fetch(
+        apiUrl(`/api/agenda/me/conversaciones/${selectedChat.id}/mensajes`),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            contenido: text,
+            tipo: 'texto',
+          }),
+        }
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success || !payload?.mensaje) {
+        return;
+      }
 
-    const nextMap = {
-      ...messagesByChat,
-      [selectedChat.id]: [...(messagesByChat[selectedChat.id] || []), nextMessage],
-    };
+      const createdAt = parseDateMs(payload?.mensaje?.createdAt);
+      const nextMessage: Message = {
+        id: normalizeText(payload?.mensaje?.mensajeId || `out-${Date.now()}`),
+        from: 'me',
+        text,
+        time: formatTimeLabel(createdAt),
+      };
 
-    setMessagesByChat(nextMap);
-    setReply('');
-    await persistMessages(nextMap);
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [selectedChat.id]: [...(prev[selectedChat.id] || []), nextMessage],
+      }));
+      setReply('');
+      loadContacts();
+    } catch {
+      // noop
+    }
   };
 
   const renderMenuItem = (
@@ -448,6 +550,9 @@ const PacienteChatScreen: React.FC = () => {
             <Image source={userAvatarSource} style={styles.userAvatar} />
             <Text style={styles.userName}>{fullName}</Text>
             <Text style={styles.userPlan}>{planLabel}</Text>
+            {!hasProfilePhoto ? (
+              <Text style={styles.hintText}>No tienes foto. Ve a Perfil para agregarla.</Text>
+            ) : null}
           </View>
           {renderMenuItem('grid-view', t('menu.home'), false, () => navigation.navigate('DashboardPaciente'))}
           {renderMenuItem('person-search', t('menu.searchDoctor'), false, () => navigation.navigate('NuevaConsultaPaciente'))}
@@ -503,7 +608,8 @@ const PacienteChatScreen: React.FC = () => {
                         <Text style={styles.chatTime}>{latest?.time || chat.timeLabel}</Text>
                       </View>
                       <Text style={styles.chatMsg} numberOfLines={1}>
-                        {latest?.text || `${chat.specialty} · ${chat.timeLabel}`}
+                        {latest?.text || `${chat.specialty} Â· ${chat.timeLabel}`}
+                        {chat.unreadCount > 0 ? ` Â· ${chat.unreadCount} sin leer` : ''}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -516,19 +622,23 @@ const PacienteChatScreen: React.FC = () => {
         <View style={styles.chatPanel}>
           <View style={styles.chatHeader}>
             <Text style={styles.chatHeaderTitle}>
-              {selectedChat ? `${selectedChat.name} · ${selectedChat.specialty}` : 'Selecciona un chat'}
+              {selectedChat ? `${selectedChat.name} Â· ${selectedChat.specialty}` : 'Selecciona un chat'}
             </Text>
           </View>
           <ScrollView contentContainerStyle={styles.messagesWrap} showsVerticalScrollIndicator={false}>
-            {messages.map((msg) => (
-              <View key={msg.id} style={[styles.msgWrap, msg.from === 'me' && styles.msgWrapMe]}>
-                {msg.dateLabel ? <Text style={styles.oldDateLabel}>{msg.dateLabel}</Text> : null}
-                <View style={[styles.msgBubble, msg.from === 'me' && styles.msgBubbleMe]}>
-                  <Text style={[styles.msgText, msg.from === 'me' && styles.msgTextMe]}>{msg.text}</Text>
+            {loadingMessages ? (
+              <Text style={styles.loadingText}>Cargando mensajes...</Text>
+            ) : (
+              messages.map((msg) => (
+                <View key={msg.id} style={[styles.msgWrap, msg.from === 'me' && styles.msgWrapMe]}>
+                  {msg.dateLabel ? <Text style={styles.oldDateLabel}>{msg.dateLabel}</Text> : null}
+                  <View style={[styles.msgBubble, msg.from === 'me' && styles.msgBubbleMe]}>
+                    <Text style={[styles.msgText, msg.from === 'me' && styles.msgTextMe]}>{msg.text}</Text>
+                  </View>
+                  <Text style={styles.msgTime}>{msg.time}</Text>
                 </View>
-                <Text style={styles.msgTime}>{msg.time}</Text>
-              </View>
-            ))}
+              ))
+            )}
           </ScrollView>
           <View style={styles.inputRow}>
             <TextInput
@@ -568,6 +678,7 @@ const styles = StyleSheet.create({
   userAvatar: { width: 76, height: 76, borderRadius: 76, marginBottom: 10, borderWidth: 4, borderColor: '#f5f7fb' },
   userName: { fontWeight: '800', color: colors.dark, fontSize: 14, textAlign: 'center' },
   userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
+  hintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -637,5 +748,7 @@ const styles = StyleSheet.create({
 });
 
 export default PacienteChatScreen;
+
+
 
 

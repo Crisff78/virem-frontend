@@ -59,16 +59,28 @@ type DoctorProfile = {
   image: ImageSourcePropType;
   about: string;
   services: string[];
+  permitePresencial: boolean;
+  permiteVirtual: boolean;
 };
 
 type BackendMedico = {
   medicoid?: string;
   nombreCompleto?: string;
   especialidad?: string;
+  permitePresencial?: boolean;
+  permiteVirtual?: boolean;
   genero?: string;
   cedula?: string;
   telefono?: string;
   fotoUrl?: string | null;
+};
+
+type AgendaSlot = {
+  disponibilidadId: number;
+  horaInicio: string;
+  horaFin: string;
+  modalidad: 'presencial' | 'virtual';
+  slotMinutos: number;
 };
 
 const parseUser = (raw: string | null): User | null => {
@@ -118,6 +130,8 @@ const toDoctorProfile = (value: {
   image?: ImageSourcePropType;
   about?: string;
   services?: string[];
+  permitePresencial?: boolean;
+  permiteVirtual?: boolean;
 }): DoctorProfile => {
   const specialty = String(value.specialty || 'Medicina General').trim() || 'Medicina General';
   const name = String(value.name || '').trim() || 'Doctor';
@@ -154,6 +168,8 @@ const toDoctorProfile = (value: {
     image: value.image || resolveDoctorImage({ fotoUrl: value.fotoUrl }),
     about,
     services,
+    permitePresencial: value.permitePresencial !== false,
+    permiteVirtual: value.permiteVirtual !== false,
   };
 };
 
@@ -186,6 +202,8 @@ const mapBackendMedicoToProfile = (
       'Orientacion clinica y plan de manejo',
       telefono ? `Contacto: ${telefono}` : 'Seguimiento por plataforma',
     ],
+    permitePresencial: medico?.permitePresencial !== false,
+    permiteVirtual: medico?.permiteVirtual !== false,
   });
 };
 
@@ -214,6 +232,8 @@ const mapRouteSnapshotToProfile = (
       Array.isArray(snapshot.tags) && snapshot.tags.length
         ? snapshot.tags
         : [`Consulta de ${specialty}`, 'Seguimiento por plataforma'],
+    permitePresencial: true,
+    permiteVirtual: true,
   });
 };
 
@@ -232,12 +252,25 @@ const createGenericFallbackDoctor = (specialty: string, doctorId: string): Docto
     image: DefaultAvatar,
     about: `Perfil temporal para ${specialty}. Actualiza la lista de especialistas para ver el perfil completo.`,
     services: [`Consulta de ${specialty}`, 'Atencion virtual'],
+    permitePresencial: true,
+    permiteVirtual: true,
   });
 
-const isSameCalendarDay = (a: Date, b: Date) =>
-  a.getFullYear() === b.getFullYear() &&
-  a.getMonth() === b.getMonth() &&
-  a.getDate() === b.getDate();
+const toIsoDate = (value: Date) => {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatSlotHour = (isoValue: string) => {
+  const date = new Date(isoValue);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('es-DO', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
 
 const getAuthToken = async (): Promise<string> => {
   try {
@@ -272,9 +305,12 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
   const [loadingUser, setLoadingUser] = useState(true);
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
   const [selectedTime, setSelectedTime] = useState('');
+  const [selectedModalidad, setSelectedModalidad] = useState<'all' | 'presencial' | 'virtual'>('all');
   const [creatingCita, setCreatingCita] = useState(false);
   const [backendDoctor, setBackendDoctor] = useState<DoctorProfile | null>(null);
   const [loadingDoctor, setLoadingDoctor] = useState(false);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [availableSlots, setAvailableSlots] = useState<AgendaSlot[]>([]);
 
   const specialty = route.params?.specialty || 'Cardiologia';
   const routeDoctorId = String(route.params?.doctorId || '').trim();
@@ -300,26 +336,110 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
     [availableDays, selectedDayOffset]
   );
 
-  const timeSlots = useMemo(
-    () => ['09:00', '10:30', '12:00', '15:30', '16:15', '18:00', '20:00'],
-    []
+  const selectedDateIso = useMemo(() => toIsoDate(selectedDate), [selectedDate]);
+  const modalidadOptions = useMemo(() => {
+    const options: Array<{ id: 'all' | 'virtual' | 'presencial'; label: string }> = [
+      { id: 'all', label: 'Todas' },
+    ];
+    if (doctor.permiteVirtual) {
+      options.push({ id: 'virtual', label: 'Virtual' });
+    }
+    if (doctor.permitePresencial) {
+      options.push({ id: 'presencial', label: 'Presencial' });
+    }
+    return options;
+  }, [doctor.permitePresencial, doctor.permiteVirtual]);
+
+  useEffect(() => {
+    const allowed = new Set(modalidadOptions.map((option) => option.id));
+    if (!allowed.has(selectedModalidad)) {
+      setSelectedModalidad('all');
+    }
+  }, [modalidadOptions, selectedModalidad]);
+
+  useEffect(() => {
+    const loadAvailability = async () => {
+      const doctorId = String(doctor.id || '').trim();
+      if (!doctorId) {
+        setAvailableSlots([]);
+        return;
+      }
+
+      setLoadingSlots(true);
+      try {
+        const token = await getAuthToken();
+        if (!token) {
+          setAvailableSlots([]);
+          return;
+        }
+
+        const query = new URLSearchParams();
+        query.set('medicoId', doctorId);
+        query.set('fecha', selectedDateIso);
+        query.set('especialidad', String(doctor.specialty || specialty).trim() || specialty);
+        if (selectedModalidad !== 'all') {
+          query.set('modalidad', selectedModalidad);
+        }
+
+        const response = await fetch(apiUrl(`/api/agenda/disponibilidades?${query.toString()}`), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await response.json().catch(() => null);
+        if (!(response.ok && payload?.success && Array.isArray(payload?.slots))) {
+          setAvailableSlots([]);
+          return;
+        }
+
+        const parsedSlots = payload.slots
+          .map((item: any) => {
+            const disponibilidadId = Number(item?.disponibilidadId);
+            const horaInicio = String(item?.horaInicio || '').trim();
+            const horaFin = String(item?.horaFin || '').trim();
+            const modalidadRaw = String(item?.modalidad || '').trim().toLowerCase();
+            const modalidad =
+              modalidadRaw === 'virtual' || modalidadRaw === 'presencial'
+                ? modalidadRaw
+                : 'presencial';
+            const slotMinutos = Number(item?.slotMinutos || 30);
+            if (!Number.isFinite(disponibilidadId) || !horaInicio || !horaFin) return null;
+            if (String(item?.medicoId || '').trim() !== doctorId) return null;
+            return {
+              disponibilidadId,
+              horaInicio,
+              horaFin,
+              modalidad: modalidad as 'presencial' | 'virtual',
+              slotMinutos: Number.isFinite(slotMinutos) ? slotMinutos : 30,
+            } as AgendaSlot;
+          })
+          .filter((slot: AgendaSlot | null): slot is AgendaSlot => Boolean(slot))
+          .sort((a: AgendaSlot, b: AgendaSlot) => new Date(a.horaInicio).getTime() - new Date(b.horaInicio).getTime());
+
+        setAvailableSlots(parsedSlots);
+      } catch {
+        setAvailableSlots([]);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+
+    loadAvailability();
+  }, [doctor.id, doctor.specialty, selectedDateIso, selectedModalidad, specialty]);
+
+  const availableTimes = useMemo(
+    () =>
+      availableSlots.map((slot) => ({
+        id: `${slot.disponibilidadId}-${slot.horaInicio}`,
+        label: formatSlotHour(slot.horaInicio),
+        slot,
+      })),
+    [availableSlots]
   );
 
-  const availableTimes = useMemo(() => {
-    const now = new Date();
-    return timeSlots.filter((slot) => {
-      if (!isSameCalendarDay(selectedDate, now)) return true;
-
-      const [hourRaw, minuteRaw] = slot.split(':');
-      const hour = Number.parseInt(hourRaw || '', 10);
-      const minute = Number.parseInt(minuteRaw || '', 10);
-      if (!Number.isFinite(hour) || !Number.isFinite(minute)) return false;
-
-      const candidate = new Date(selectedDate);
-      candidate.setHours(hour, minute, 0, 0);
-      return candidate.getTime() >= now.getTime() + 10 * 60 * 1000;
-    });
-  }, [selectedDate, timeSlots]);
+  const selectedSlot = useMemo(
+    () => availableTimes.find((slot) => slot.id === selectedTime)?.slot || null,
+    [availableTimes, selectedTime]
+  );
 
   useEffect(() => {
     if (!availableTimes.length) {
@@ -327,8 +447,8 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
       return;
     }
 
-    if (!availableTimes.includes(selectedTime)) {
-      setSelectedTime(availableTimes[0]);
+    if (!availableTimes.some((slot) => slot.id === selectedTime)) {
+      setSelectedTime(availableTimes[0].id);
     }
   }, [availableTimes, selectedTime]);
 
@@ -541,7 +661,7 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
   };
 
   const handleCreateAppointment = async () => {
-    if (!selectedTime) {
+    if (!selectedSlot) {
       Alert.alert('Horario no disponible', 'Selecciona otro dia u horario para continuar.');
       return;
     }
@@ -552,17 +672,11 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
       navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
       return;
     }
-
-    const [hourRaw, minuteRaw] = selectedTime.split(':');
-    const hour = Number.parseInt(hourRaw || '', 10);
-    const minute = Number.parseInt(minuteRaw || '', 10);
-    if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    const appointmentDate = new Date(selectedSlot.horaInicio);
+    if (Number.isNaN(appointmentDate.getTime())) {
       Alert.alert('Horario invalido', 'Selecciona un horario valido.');
       return;
     }
-
-    const appointmentDate = new Date(selectedDate);
-    appointmentDate.setHours(hour, minute, 0, 0);
 
     setCreatingCita(true);
     try {
@@ -570,11 +684,12 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
       const requestSpecialty = String(doctor.specialty || specialty).trim() || specialty;
       const requestDoctorId = String(doctor.id || '').trim();
       const body: any = {
-        fechaHoraInicio: appointmentDate.toISOString(),
-        duracionMin: 30,
-        nota: `Solicitud desde portal paciente - ${doctor.focus}`,
+        disponibilidadId: selectedSlot.disponibilidadId,
+        fechaHoraInicio: selectedSlot.horaInicio,
+        duracionMin: selectedSlot.slotMinutos,
+        modalidad: selectedSlot.modalidad,
+        motivoConsulta: `Solicitud desde portal paciente - ${doctor.focus}`,
         especialidad: requestSpecialty,
-        nombreMedico: doctor.name,
       };
       if (requestDoctorId) {
         body.medicoId = requestDoctorId;
@@ -583,7 +698,7 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
         body.precio = parsedPrice;
       }
 
-      const response = await fetch(apiUrl('/api/users/me/citas'), {
+      const response = await fetch(apiUrl('/api/agenda/me/citas'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -614,11 +729,14 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
         hour: '2-digit',
         minute: '2-digit',
       }).format(finalDate);
-      const medicoAsignado = String(payload?.medico?.nombreCompleto || doctor.name).trim();
+      const medicoAsignado = String(payload?.cita?.medico?.nombreCompleto || doctor.name).trim();
+      const modalidadLabel =
+        String(payload?.cita?.modalidad || selectedSlot.modalidad || 'presencial')
+          .replace(/^\w/, (m: string) => m.toUpperCase());
 
       Alert.alert(
         'Cita agendada',
-        `Tu cita quedo creada con ${medicoAsignado} para ${finalDateText}.`
+        `Tu cita quedó creada con ${medicoAsignado} para ${finalDateText} (${modalidadLabel}).`
       );
       navigation.navigate('DashboardPaciente');
     } catch {
@@ -691,18 +809,18 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.menuItemRow}
-              onPress={() => navigation.navigate('PacienteRecetasDocumentos')}
-            >
-              <MaterialIcons name="description" size={20} color={colors.muted} />
-              <Text style={styles.menuText}>{t('menu.recipesDocs')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItemRow}
               onPress={() => navigation.navigate('PacienteChat')}
             >
               <MaterialIcons name="chat-bubble" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.chat')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteRecetasDocumentos')}
+            >
+              <MaterialIcons name="description" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.recipesDocs')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -857,16 +975,38 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
                   </View>
 
                   <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Horarios disponibles</Text>
-                  {availableTimes.length ? (
+                  <View style={styles.modeRow}>
+                    {modalidadOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.id}
+                        style={[styles.modeBtn, selectedModalidad === option.id && styles.modeBtnActive]}
+                        onPress={() => setSelectedModalidad(option.id)}
+                      >
+                        <Text style={[styles.modeText, selectedModalidad === option.id && styles.modeTextActive]}>
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {loadingSlots ? (
+                    <View style={styles.noTimeWrap}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text style={styles.noTimeText}>Cargando disponibilidad real...</Text>
+                    </View>
+                  ) : availableTimes.length ? (
                     <View style={styles.timeGrid}>
-                      {availableTimes.map((time) => (
+                      {availableTimes.map((item) => (
                         <TouchableOpacity
-                          key={time}
-                          style={[styles.timeBtn, selectedTime === time && styles.timeBtnActive]}
-                          onPress={() => setSelectedTime(time)}
+                          key={item.id}
+                          style={[styles.timeBtn, selectedTime === item.id && styles.timeBtnActive]}
+                          onPress={() => setSelectedTime(item.id)}
                         >
-                          <Text style={[styles.timeText, selectedTime === time && styles.timeTextActive]}>
-                            {time}
+                          <Text style={[styles.timeText, selectedTime === item.id && styles.timeTextActive]}>
+                            {item.label}
+                          </Text>
+                          <Text style={[styles.slotMeta, selectedTime === item.id && styles.slotMetaActive]}>
+                            {item.slot.modalidad}
                           </Text>
                         </TouchableOpacity>
                       ))}
@@ -874,7 +1014,7 @@ const PerfilEspecialistaAgendarScreen: React.FC = () => {
                   ) : (
                     <View style={styles.noTimeWrap}>
                       <Text style={styles.noTimeText}>
-                        No hay horarios disponibles para este dia.
+                        No hay horarios disponibles para este dia con esos filtros.
                       </Text>
                     </View>
                   )}
@@ -1150,6 +1290,20 @@ const styles = StyleSheet.create({
   dayText: { color: colors.dark, fontWeight: '700', fontSize: 11 },
   dayTextActive: { color: '#fff' },
 
+  modeRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
+  modeBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#dfeaf5',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  modeBtnActive: { borderColor: colors.blue, backgroundColor: '#f2f8ff' },
+  modeText: { color: colors.muted, fontWeight: '700', fontSize: 11 },
+  modeTextActive: { color: colors.blue },
+
   timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   timeBtn: {
     width: '31%',
@@ -1163,6 +1317,8 @@ const styles = StyleSheet.create({
   timeBtnActive: { borderColor: colors.blue, borderWidth: 2, backgroundColor: '#f2f8ff' },
   timeText: { color: colors.muted, fontWeight: '800', fontSize: 11 },
   timeTextActive: { color: colors.blue },
+  slotMeta: { color: '#6b8ca8', fontSize: 10, fontWeight: '700', marginTop: 4, textTransform: 'capitalize' },
+  slotMetaActive: { color: colors.blue },
   noTimeWrap: {
     borderWidth: 1,
     borderStyle: 'dashed',

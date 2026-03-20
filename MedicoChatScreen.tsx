@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -17,9 +17,10 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { io, Socket } from 'socket.io-client';
 
 import type { RootStackParamList } from './navigation/types';
-import { apiUrl } from './config/backend';
+import { apiUrl, BACKEND_URL } from './config/backend';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
@@ -28,7 +29,7 @@ const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
 const AUTH_TOKEN_KEY = 'authToken';
 const LEGACY_TOKEN_KEY = 'token';
-const CHAT_STORAGE_PREFIX = 'medicoChatByPatient';
+const MIN_REFRESH_INTERVAL_MS = 12000;
 
 type SessionUser = {
   id?: number | string;
@@ -46,20 +47,13 @@ type Message = {
   time: string;
 };
 
-type CitaItem = {
-  citaid?: string;
-  fechaHoraInicio?: string | null;
-  estado?: string;
-  paciente?: {
-    pacienteid?: string;
-    nombreCompleto?: string;
-  };
-};
-
 type ChatContact = {
   id: string;
+  patientId: string;
   name: string;
   status: string;
+  citaId: string;
+  unreadCount: number;
   nextDateMs: number;
   timeLabel: string;
 };
@@ -111,12 +105,6 @@ const formatDateTime = (value: string | null | undefined) => {
   }).format(date);
 };
 
-const nowLabel = () =>
-  new Intl.DateTimeFormat('es-DO', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date());
-
 const getAuthToken = async (): Promise<string> => {
   try {
     if (Platform.OS === 'web') {
@@ -147,17 +135,16 @@ const MedicoChatScreen: React.FC = () => {
 
   const [loadingUser, setLoadingUser] = useState(true);
   const [loadingContacts, setLoadingContacts] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [contacts, setContacts] = useState<ChatContact[]>([]);
   const [searchText, setSearchText] = useState('');
   const [reply, setReply] = useState('');
   const [selectedChatId, setSelectedChatId] = useState('');
   const [messagesByChat, setMessagesByChat] = useState<Record<string, Message[]>>({});
-
-  const chatStorageKey = useMemo(() => {
-    const idSeed = normalizeText(user?.usuarioid || user?.id || user?.email).toLowerCase();
-    return `${CHAT_STORAGE_PREFIX}:${idSeed || 'default'}`;
-  }, [user?.email, user?.id, user?.usuarioid]);
+  const socketRef = useRef<Socket | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRefreshRef = useRef(0);
 
   const loadUser = useCallback(async () => {
     setLoadingUser(true);
@@ -204,40 +191,39 @@ const MedicoChatScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl('/api/users/me/citas?scope=all&limit=150'), {
+      const response = await fetch(apiUrl('/api/agenda/me/conversaciones?limit=150'), {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
       });
       const payload = await response.json().catch(() => null);
-      if (!(response.ok && payload?.success && Array.isArray(payload?.citas))) {
+      if (!(response.ok && payload?.success && Array.isArray(payload?.conversaciones))) {
         setContacts([]);
         return;
       }
 
-      const byPatient = new Map<string, ChatContact>();
-      for (const cita of payload.citas as CitaItem[]) {
-        const patientId = normalizeText(cita?.paciente?.pacienteid);
-        const patientName = normalizeText(cita?.paciente?.nombreCompleto || 'Paciente');
-        const key = patientId || `patient:${patientName.toLowerCase()}`;
-        const ms = parseDateMs(cita?.fechaHoraInicio);
-        const status = normalizeText(cita?.estado || 'Pendiente') || 'Pendiente';
-        const row: ChatContact = {
-          id: key,
-          name: patientName,
-          status,
-          nextDateMs: ms,
-          timeLabel: formatDateTime(cita?.fechaHoraInicio),
-        };
-        const previous = byPatient.get(key);
-        if (!previous || ms < previous.nextDateMs) {
-          byPatient.set(key, row);
-        }
-      }
-
-      const sorted = [...byPatient.values()].sort((a, b) => {
-        if (a.nextDateMs === b.nextDateMs) return a.name.localeCompare(b.name);
-        return a.nextDateMs - b.nextDateMs;
-      });
+      const sorted = (payload.conversaciones as any[])
+        .map((conversation) => {
+          const conversationId = normalizeText(conversation?.conversacionId);
+          const citaId = normalizeText(conversation?.citaId);
+          if (!conversationId || !citaId) return null;
+          const nextDateMs = parseDateMs(conversation?.cita?.fechaHoraInicio || null);
+          return {
+            id: conversationId,
+            patientId: normalizeText(conversation?.paciente?.pacienteid),
+            name: normalizeText(conversation?.paciente?.nombreCompleto || 'Paciente') || 'Paciente',
+            status: normalizeText(conversation?.cita?.estadoCodigo || 'pendiente') || 'pendiente',
+            citaId,
+            unreadCount: Number(conversation?.unreadCount || 0),
+            nextDateMs,
+            timeLabel: formatDateTime(conversation?.cita?.fechaHoraInicio),
+          } as ChatContact;
+        })
+        .filter((row: ChatContact | null): row is ChatContact => Boolean(row))
+        .sort((a, b) => {
+          if (a.unreadCount !== b.unreadCount) return b.unreadCount - a.unreadCount;
+          if (a.nextDateMs === b.nextDateMs) return a.name.localeCompare(b.name);
+          return a.nextDateMs - b.nextDateMs;
+        });
       setContacts(sorted);
     } catch {
       setContacts([]);
@@ -246,78 +232,168 @@ const MedicoChatScreen: React.FC = () => {
     }
   }, []);
 
+  const scheduleContactsReload = useCallback(() => {
+    if (refreshTimerRef.current) return;
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      loadContacts();
+    }, 500);
+  }, [loadContacts]);
+
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current < MIN_REFRESH_INTERVAL_MS) {
+        return;
+      }
+      lastRefreshRef.current = now;
       loadUser();
       loadContacts();
     }, [loadContacts, loadUser])
   );
 
-  useEffect(() => {
-    const loadStoredMessages = async () => {
-      try {
-        const raw = await AsyncStorage.getItem(chatStorageKey);
-        if (raw) {
-          setMessagesByChat(parseJson<Record<string, Message[]>>(raw) || {});
-          return;
+  const loadMessages = useCallback(async (conversationId: string) => {
+    const cleanConversationId = normalizeText(conversationId);
+    if (!cleanConversationId) return;
+
+    setLoadingMessages(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(
+        apiUrl(`/api/agenda/me/conversaciones/${cleanConversationId}/mensajes?limit=120`),
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
         }
-      } catch {}
-
-      if (Platform.OS === 'web') {
-        try {
-          const raw = localStorage.getItem(chatStorageKey);
-          if (raw) {
-            setMessagesByChat(parseJson<Record<string, Message[]>>(raw) || {});
-            return;
-          }
-        } catch {}
+      );
+      const payload = await response.json().catch(() => null);
+      if (!(response.ok && payload?.success && Array.isArray(payload?.mensajes))) {
+        return;
       }
-      setMessagesByChat({});
-    };
-    loadStoredMessages();
-  }, [chatStorageKey]);
 
-  const persistMessages = useCallback(
-    async (next: Record<string, Message[]>) => {
-      const raw = JSON.stringify(next);
-      try {
-        await AsyncStorage.setItem(chatStorageKey, raw);
-      } catch {}
-      if (Platform.OS === 'web') {
-        try {
-          localStorage.setItem(chatStorageKey, raw);
-        } catch {}
-      }
-    },
-    [chatStorageKey]
-  );
+      const normalized = (payload.mensajes as any[]).map((message: any) => {
+        const sender = normalizeText(message?.emisorTipo).toLowerCase();
+        const from = sender === 'medico' ? 'me' : 'other';
+        return {
+          id: normalizeText(message?.mensajeId || `${Date.now()}-${Math.random()}`),
+          from,
+          text: normalizeText(message?.contenido),
+          time: formatDateTime(message?.createdAt),
+        } as Message;
+      });
+
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [cleanConversationId]: normalized,
+      }));
+
+      await fetch(apiUrl(`/api/agenda/me/conversaciones/${cleanConversationId}/leido`), {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      }).catch(() => null);
+    } catch {
+      // noop
+    } finally {
+      setLoadingMessages(false);
+    }
+  }, []);
 
   useEffect(() => {
     const routePatientId = normalizeText(route.params?.patientId);
     const routePatientName = normalizeText(route.params?.patientName);
-    if (!routePatientId && !routePatientName) return;
+    if (!contacts.length) {
+      setSelectedChatId('');
+      return;
+    }
 
-    const routeKey = routePatientId || `patient:${routePatientName.toLowerCase()}`;
-    setContacts((prev) => {
-      if (prev.some((item) => item.id === routeKey)) return prev;
-      return [
-        {
-          id: routeKey,
-          name: routePatientName || 'Paciente',
-          status: 'Nuevo chat',
-          nextDateMs: Number.POSITIVE_INFINITY,
-          timeLabel: 'Sin fecha',
-        },
-        ...prev,
-      ];
-    });
-    setSelectedChatId(routeKey);
-  }, [route.params?.patientId, route.params?.patientName]);
+    if (routePatientId) {
+      const byPatientId = contacts.find((c) => normalizeText(c.patientId) === routePatientId);
+      if (byPatientId) {
+        setSelectedChatId(byPatientId.id);
+        return;
+      }
+    }
+
+    if (routePatientName) {
+      const byName = contacts.find(
+        (c) => normalizeText(c.name).toLowerCase() === routePatientName.toLowerCase()
+      );
+      if (byName) {
+        setSelectedChatId(byName.id);
+        return;
+      }
+    }
+
+    if (!contacts.some((c) => c.id === selectedChatId)) {
+      setSelectedChatId(contacts[0].id);
+    }
+  }, [contacts, route.params?.patientId, route.params?.patientName, selectedChatId]);
 
   useEffect(() => {
-    if (selectedChatId) return;
-    if (contacts.length) setSelectedChatId(contacts[0].id);
-  }, [contacts, selectedChatId]);
+    if (!selectedChatId) return;
+    loadMessages(selectedChatId);
+  }, [loadMessages, selectedChatId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      const initSocket = async () => {
+        const token = await getAuthToken();
+        if (!mounted || !token) return;
+
+        const socket = io(BACKEND_URL, {
+          transports: ['websocket'],
+          auth: { token },
+        });
+        socketRef.current = socket;
+
+        socket.on('mensaje_nuevo', (payload: any) => {
+          const conversationId = normalizeText(payload?.conversacionId);
+          if (!conversationId) return;
+          const rawMessage = payload?.mensaje;
+          if (conversationId === selectedChatId && rawMessage) {
+            const sender = normalizeText(rawMessage?.emisorTipo).toLowerCase();
+            const from = sender === 'medico' ? 'me' : 'other';
+            const nextMessage: Message = {
+              id: normalizeText(rawMessage?.mensajeId || `${Date.now()}-${Math.random()}`),
+              from,
+              text: normalizeText(rawMessage?.contenido),
+              time: formatDateTime(rawMessage?.createdAt),
+            };
+            setMessagesByChat((prev) => ({
+              ...prev,
+              [conversationId]: [...(prev[conversationId] || []), nextMessage],
+            }));
+          }
+          scheduleContactsReload();
+          if (conversationId === selectedChatId) {
+            loadMessages(conversationId);
+          }
+        });
+        socket.on('cita_actualizada', () => scheduleContactsReload());
+        socket.on('cita_reprogramada', () => scheduleContactsReload());
+      };
+
+      initSocket();
+      return () => {
+        mounted = false;
+        if (socketRef.current) {
+          socketRef.current.removeAllListeners();
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
+        if (refreshTimerRef.current) {
+          clearTimeout(refreshTimerRef.current);
+          refreshTimerRef.current = null;
+        }
+      };
+    }, [loadMessages, scheduleContactsReload, selectedChatId])
+  );
 
   const filteredContacts = useMemo(() => {
     const q = normalizeText(searchText).toLowerCase();
@@ -378,20 +454,42 @@ const MedicoChatScreen: React.FC = () => {
     const text = normalizeText(reply);
     if (!text || !selectedChatId) return;
 
-    const nextMessage: Message = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      from: 'me',
-      text,
-      time: nowLabel(),
-    };
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
 
-    const nextMap: Record<string, Message[]> = {
-      ...messagesByChat,
-      [selectedChatId]: [...(messagesByChat[selectedChatId] || []), nextMessage],
-    };
-    setMessagesByChat(nextMap);
-    setReply('');
-    await persistMessages(nextMap);
+      const response = await fetch(apiUrl(`/api/agenda/me/conversaciones/${selectedChatId}/mensajes`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          contenido: text,
+          tipo: 'texto',
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success || !payload?.mensaje) {
+        return;
+      }
+
+      const nextMessage: Message = {
+        id: normalizeText(payload?.mensaje?.mensajeId || `${Date.now()}`),
+        from: 'me',
+        text,
+        time: formatDateTime(payload?.mensaje?.createdAt),
+      };
+
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [selectedChatId]: [...(prev[selectedChatId] || []), nextMessage],
+      }));
+      setReply('');
+      loadContacts();
+    } catch {
+      // noop
+    }
   };
 
   const sideItems: SideItem[] = [
@@ -537,6 +635,7 @@ const MedicoChatScreen: React.FC = () => {
                       <Text style={[styles.contactName, active && styles.contactNameActive]}>{chat.name}</Text>
                       <Text style={styles.contactMeta}>
                         {chat.status} · {chat.timeLabel}
+                        {chat.unreadCount > 0 ? ` · ${chat.unreadCount} sin leer` : ''}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -559,7 +658,9 @@ const MedicoChatScreen: React.FC = () => {
                 </View>
 
                 <ScrollView style={styles.messagesList} contentContainerStyle={{ paddingBottom: 12 }}>
-                  {!currentMessages.length ? (
+                  {loadingMessages ? (
+                    <Text style={styles.emptyConversation}>Cargando mensajes...</Text>
+                  ) : !currentMessages.length ? (
                     <Text style={styles.emptyConversation}>
                       Inicia la conversacion con {selectedContact.name}.
                     </Text>
@@ -810,3 +911,4 @@ const styles = StyleSheet.create({
 });
 
 export default MedicoChatScreen;
+

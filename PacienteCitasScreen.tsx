@@ -1,6 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react';
+﻿import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Platform,
@@ -17,10 +16,11 @@ import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { io, Socket } from 'socket.io-client';
 
 import { useLanguage } from './localization/LanguageContext';
 import type { RootStackParamList } from './navigation/types';
-import { apiUrl } from './config/backend';
+import { apiUrl, BACKEND_URL } from './config/backend';
 import { ensurePatientSessionUser, getPatientDisplayName } from './utils/patientSession';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
@@ -52,6 +52,9 @@ type CitaItem = {
   nota: string;
   precio: number | null;
   estado: string;
+  estadoCodigo?: string;
+  modalidad?: string;
+  conversacionId?: string | null;
   medico?: {
     medicoid?: string;
     nombreCompleto?: string;
@@ -143,6 +146,8 @@ const colors = {
   warning: '#f59e0b',
 };
 
+const MIN_REFRESH_INTERVAL_MS = 15000;
+
 const PacienteCitasScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { t } = useLanguage();
@@ -152,9 +157,13 @@ const PacienteCitasScreen: React.FC = () => {
   const [workingCitaId, setWorkingCitaId] = useState('');
   const [searchText, setSearchText] = useState('');
   const [citas, setCitas] = useState<CitaItem[]>([]);
+  const lastRefreshRef = useRef(0);
+  const socketRef = useRef<Socket | null>(null);
 
   const loadUser = useCallback(async () => {
-    setLoadingUser(true);
+    if (!user) {
+      setLoadingUser(true);
+    }
     try {
       const rawUserFromStorage =
         Platform.OS === 'web'
@@ -210,7 +219,7 @@ const PacienteCitasScreen: React.FC = () => {
     } finally {
       setLoadingUser(false);
     }
-  }, []);
+  }, [user]);
 
   const loadCitas = useCallback(async () => {
     setLoadingCitas(true);
@@ -221,7 +230,7 @@ const PacienteCitasScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl('/api/users/me/citas?scope=all&limit=100'), {
+      const response = await fetch(apiUrl('/api/agenda/me/citas?scope=all&limit=120'), {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -240,9 +249,65 @@ const PacienteCitasScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current < MIN_REFRESH_INTERVAL_MS) {
+        return;
+      }
+      lastRefreshRef.current = now;
       loadUser();
       loadCitas();
     }, [loadCitas, loadUser])
+  );
+
+  const upsertCita = useCallback((nextCita: CitaItem) => {
+    if (!nextCita?.citaid) return;
+    setCitas((prev) => {
+      const idx = prev.findIndex((item) => item.citaid === nextCita.citaid);
+      if (idx === -1) return [nextCita, ...prev];
+      const next = [...prev];
+      next[idx] = { ...prev[idx], ...nextCita };
+      return next;
+    });
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      const initSocket = async () => {
+        const token = await getAuthToken();
+        if (!mounted || !token) return;
+
+        const socket = io(BACKEND_URL, {
+          transports: ['websocket'],
+          auth: { token },
+        });
+        socketRef.current = socket;
+
+        const onCitaEvent = (payload: any) => {
+          const citaPayload = payload?.cita as CitaItem | undefined;
+          if (citaPayload?.citaid) {
+            upsertCita(citaPayload);
+          } else {
+            loadCitas();
+          }
+        };
+
+        socket.on('cita_creada', onCitaEvent);
+        socket.on('cita_actualizada', onCitaEvent);
+        socket.on('cita_cancelada', onCitaEvent);
+        socket.on('cita_reprogramada', onCitaEvent);
+      };
+
+      initSocket();
+      return () => {
+        mounted = false;
+        if (socketRef.current) {
+          socketRef.current.removeAllListeners();
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
+      };
+    }, [loadCitas, upsertCita])
   );
 
   const fullName = useMemo(() => getPatientDisplayName(user, 'Paciente'), [user]);
@@ -253,6 +318,7 @@ const PacienteCitasScreen: React.FC = () => {
   }, [user]);
 
   const userAvatarSource: ImageSourcePropType = useMemo(() => resolveAvatarSource(user?.fotoUrl), [user?.fotoUrl]);
+  const hasProfilePhoto = useMemo(() => Boolean(sanitizeFotoUrl(user?.fotoUrl)), [user?.fotoUrl]);
 
   const filteredCitas = useMemo(() => {
     const query = normalizeText(searchText).toLowerCase();
@@ -261,7 +327,8 @@ const PacienteCitasScreen: React.FC = () => {
       const doctor = normalizeText(item?.medico?.nombreCompleto).toLowerCase();
       const spec = normalizeText(item?.medico?.especialidad).toLowerCase();
       const estado = normalizeText(item?.estado).toLowerCase();
-      return doctor.includes(query) || spec.includes(query) || estado.includes(query);
+      const modalidad = normalizeText(item?.modalidad).toLowerCase();
+      return doctor.includes(query) || spec.includes(query) || estado.includes(query) || modalidad.includes(query);
     });
   }, [citas, searchText]);
 
@@ -307,7 +374,9 @@ const PacienteCitasScreen: React.FC = () => {
       'Detalle de cita',
       `Doctor: ${normalizeText(cita?.medico?.nombreCompleto || 'Especialista')}\nEspecialidad: ${normalizeText(
         cita?.medico?.especialidad || 'Medicina General'
-      )}\nFecha: ${formatDateTime(cita.fechaHoraInicio)}\nEstado: ${normalizeText(cita.estado || 'Pendiente')}`
+      )}\nFecha: ${formatDateTime(cita.fechaHoraInicio)}\nModalidad: ${normalizeText(
+        cita.modalidad || 'presencial'
+      )}\nEstado: ${normalizeText(cita.estado || 'Pendiente')}`
     );
   };
 
@@ -321,12 +390,19 @@ const PacienteCitasScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl(`/api/users/me/citas/${cita.citaid}/postpone`), {
+      const currentStart = cita?.fechaHoraInicio ? new Date(cita.fechaHoraInicio) : new Date();
+      const nextStart = new Date(currentStart.getTime() + 24 * 60 * 60 * 1000);
+
+      const response = await fetch(apiUrl(`/api/agenda/me/citas/${cita.citaid}/reprogramar`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({
+          fechaHoraInicio: nextStart.toISOString(),
+          motivo: 'Reprogramada desde panel del paciente',
+        }),
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload?.success) {
@@ -334,10 +410,53 @@ const PacienteCitasScreen: React.FC = () => {
         return;
       }
 
+      if (payload?.cita) {
+        upsertCita(payload.cita as CitaItem);
+      } else {
+        await loadCitas();
+      }
       Alert.alert('Cita pospuesta', `Nueva fecha: ${formatDateTime(payload?.cita?.fechaHoraInicio || null)}`);
-      await loadCitas();
     } catch {
       Alert.alert('Error', 'No se pudo conectar para posponer la cita.');
+    } finally {
+      setWorkingCitaId('');
+    }
+  };
+
+  const cancelCita = async (cita: CitaItem) => {
+    setWorkingCitaId(cita.citaid);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        Alert.alert('Sesion expirada', 'Inicia sesion nuevamente.');
+        navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+        return;
+      }
+
+      const response = await fetch(apiUrl(`/api/agenda/me/citas/${cita.citaid}/cancelar`), {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          motivo: 'Cancelada desde panel del paciente',
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) {
+        Alert.alert('No se pudo cancelar', payload?.message || 'Intenta nuevamente.');
+        return;
+      }
+
+      if (payload?.cita) {
+        upsertCita(payload.cita as CitaItem);
+      } else {
+        await loadCitas();
+      }
+      Alert.alert('Cita cancelada', 'La cita fue cancelada correctamente.');
+    } catch {
+      Alert.alert('Error', 'No se pudo conectar para cancelar la cita.');
     } finally {
       setWorkingCitaId('');
     }
@@ -346,7 +465,7 @@ const PacienteCitasScreen: React.FC = () => {
   const askPostpone = (cita: CitaItem) => {
     Alert.alert(
       'Posponer cita',
-      'Se movera esta cita 24 horas hacia adelante. ¿Deseas continuar?',
+      'Se movera esta cita 24 horas hacia adelante. Deseas continuar?',
       [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Posponer', onPress: () => postponeCita(cita) },
@@ -354,14 +473,16 @@ const PacienteCitasScreen: React.FC = () => {
     );
   };
 
-  if (loadingUser) {
-    return (
-      <View style={styles.loaderWrap}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loaderText}>Cargando citas del paciente...</Text>
-      </View>
+  const askCancel = (cita: CitaItem) => {
+    Alert.alert(
+      'Cancelar cita',
+      'Se cancelara esta cita y el horario volvera a estar disponible.',
+      [
+        { text: 'Volver', style: 'cancel' },
+        { text: 'Cancelar cita', style: 'destructive', onPress: () => cancelCita(cita) },
+      ]
     );
-  }
+  };
 
   return (
     <View style={styles.container}>
@@ -379,6 +500,10 @@ const PacienteCitasScreen: React.FC = () => {
             <Image source={userAvatarSource} style={styles.userAvatar} />
             <Text style={styles.userName}>{fullName}</Text>
             <Text style={styles.userPlan}>{planLabel}</Text>
+            {loadingUser ? <Text style={styles.syncText}>Actualizando perfil...</Text> : null}
+            {!hasProfilePhoto ? (
+              <Text style={styles.hintText}>No tienes foto. Ve a Perfil para agregarla.</Text>
+            ) : null}
           </View>
 
           <View style={styles.menu}>
@@ -415,6 +540,11 @@ const PacienteCitasScreen: React.FC = () => {
             <TouchableOpacity style={styles.menuItemRow} onPress={() => navigation.navigate('PacientePerfil')}>
               <MaterialIcons name="account-circle" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.profile')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItemRow} onPress={() => navigation.navigate('PacienteConfiguracion')}>
+              <MaterialIcons name="settings" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -464,11 +594,16 @@ const PacienteCitasScreen: React.FC = () => {
                     <Text style={styles.citaDetail}>
                       {normalizeText(cita?.medico?.especialidad || 'Medicina General')} · {formatDateTime(cita.fechaHoraInicio)}
                     </Text>
+                    <Text style={styles.citaDetail}>Modalidad: {normalizeText(cita?.modalidad || 'presencial')}</Text>
                     <Text style={styles.citaState}>{normalizeText(cita.estado || 'Pendiente')}</Text>
                     <View style={styles.citaActions}>
                       <TouchableOpacity
-                        style={styles.actionBlue}
+                        style={[
+                          styles.actionBlue,
+                          normalizeText(cita?.modalidad).toLowerCase() !== 'virtual' && styles.actionDisabled,
+                        ]}
                         onPress={() => navigation.navigate('SalaEsperaVirtualPaciente', { citaId: cita.citaid })}
+                        disabled={normalizeText(cita?.modalidad).toLowerCase() !== 'virtual'}
                       >
                         <Text style={styles.actionBlueText}>Videollamada</Text>
                       </TouchableOpacity>
@@ -479,6 +614,15 @@ const PacienteCitasScreen: React.FC = () => {
                       >
                         <Text style={styles.actionGrayText}>
                           {workingCitaId === cita.citaid ? 'Posponiendo...' : 'Posponer'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionGray, workingCitaId === cita.citaid && styles.actionDisabled]}
+                        onPress={() => askCancel(cita)}
+                        disabled={workingCitaId === cita.citaid}
+                      >
+                        <Text style={styles.actionGrayText}>
+                          {workingCitaId === cita.citaid ? 'Procesando...' : 'Cancelar'}
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.actionGray} onPress={() => showDetails(cita)}>
@@ -535,8 +679,6 @@ const styles = StyleSheet.create({
     flexDirection: Platform.OS === 'web' ? 'row' : 'column',
     backgroundColor: colors.bg,
   },
-  loaderWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg },
-  loaderText: { marginTop: 8, color: colors.muted, fontWeight: '700' },
 
   sidebar: {
     width: Platform.OS === 'web' ? 280 : '100%',
@@ -556,6 +698,8 @@ const styles = StyleSheet.create({
   userAvatar: { width: 76, height: 76, borderRadius: 76, marginBottom: 10, borderWidth: 4, borderColor: '#f5f7fb' },
   userName: { fontWeight: '800', color: colors.dark, fontSize: 14, textAlign: 'center' },
   userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2, textAlign: 'center' },
+  syncText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  hintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   menu: { marginTop: 10, gap: 6, flex: Platform.OS === 'web' ? 1 : 0, flexDirection: Platform.OS === 'web' ? 'column' : 'row', flexWrap: 'wrap' },
   menuItemRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, minWidth: Platform.OS === 'web' ? 0 : 150 },
   menuItemActive: { backgroundColor: 'rgba(19,127,236,0.10)', borderRightWidth: 3, borderRightColor: colors.primary },
@@ -643,3 +787,4 @@ const styles = StyleSheet.create({
 });
 
 export default PacienteCitasScreen;
+

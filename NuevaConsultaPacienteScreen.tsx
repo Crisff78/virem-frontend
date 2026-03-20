@@ -1,6 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Image,
   Platform,
   Pressable,
@@ -430,15 +429,6 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
     navigation.navigate('EspecialistasPorEspecialidad', { specialty: label });
   };
 
-  if (loadingUser) {
-    return (
-      <View style={styles.loaderWrap}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loaderText}>Cargando informacion del paciente...</Text>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
       <View style={styles.sidebar}>
@@ -455,6 +445,7 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
             <Image source={userAvatarSource} style={styles.userAvatar} />
             <Text style={styles.userName}>{fullName}</Text>
             <Text style={styles.userPlan}>{planLabel}</Text>
+            {loadingUser ? <Text style={styles.syncText}>Actualizando perfil...</Text> : null}
             {!user?.fotoUrl ? (
               <Text style={styles.hintText}>No tienes foto. Ve a Perfil para agregarla.</Text>
             ) : null}
@@ -515,6 +506,14 @@ const NuevaConsultaPacienteScreen: React.FC = () => {
             >
               <MaterialIcons name="account-circle" size={20} color={colors.muted} />
               <Text style={styles.menuText}>{t('menu.profile')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItemRow}
+              onPress={() => navigation.navigate('PacienteConfiguracion')}
+            >
+              <MaterialIcons name="settings" size={20} color={colors.muted} />
+              <Text style={styles.menuText}>{t('menu.settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -657,14 +656,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
 
-  loaderWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bg,
-  },
-  loaderText: { marginTop: 10, color: colors.muted, fontWeight: '700' },
-
   sidebar: {
     width: Platform.OS === 'web' ? 280 : '100%',
     backgroundColor: colors.white,
@@ -691,6 +682,7 @@ const styles = StyleSheet.create({
   },
   userName: { fontWeight: '800', color: colors.dark, fontSize: 14 },
   userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
+  syncText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '600', textAlign: 'center' },
   hintText: { marginTop: 6, color: colors.muted, fontSize: 11, fontWeight: '700' },
 
   menu: {

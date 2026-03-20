@@ -204,7 +204,7 @@ const MedicoPacientesScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl('/api/users/me/citas?scope=all&limit=400'), {
+      const response = await fetch(apiUrl('/api/agenda/me/citas?scope=all&limit=400'), {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
       });

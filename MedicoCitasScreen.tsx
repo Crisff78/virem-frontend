@@ -1,8 +1,9 @@
-import React, { useCallback, useMemo, useState } from 'react';
+﻿import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -17,8 +18,9 @@ import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { io, Socket } from 'socket.io-client';
 import type { RootStackParamList } from './navigation/types';
-import { apiUrl } from './config/backend';
+import { apiUrl, BACKEND_URL } from './config/backend';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
@@ -49,10 +51,25 @@ type CitaItem = {
   nota: string;
   precio: number | null;
   estado: string;
+  estadoCodigo?: string;
+  modalidad?: string;
+  conversacionId?: string | null;
   paciente?: {
     pacienteid?: string;
     nombreCompleto?: string;
   };
+};
+
+type DisponibilidadItem = {
+  id: string;
+  fechaInicio: string | null;
+  fechaFin: string | null;
+  modalidad: 'presencial' | 'virtual' | 'ambas';
+  slotMinutos: number;
+  activo: boolean;
+  bloqueado: boolean;
+  especialidad?: string;
+  nota?: string;
 };
 
 type SideItem = {
@@ -126,14 +143,44 @@ const getAuthToken = async (): Promise<string> => {
   }
 };
 
+const MIN_REFRESH_INTERVAL_MS = 12000;
+
+const toIsoDate = (value: Date) => {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const toHourMinute = (value: string | null | undefined) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+};
+
 const MedicoCitasScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
   const [loadingCitas, setLoadingCitas] = useState(false);
+  const [loadingDisponibilidades, setLoadingDisponibilidades] = useState(false);
+  const [savingDisponibilidad, setSavingDisponibilidad] = useState(false);
   const [workingCitaId, setWorkingCitaId] = useState('');
   const [searchText, setSearchText] = useState('');
   const [citas, setCitas] = useState<CitaItem[]>([]);
+  const [disponibilidades, setDisponibilidades] = useState<DisponibilidadItem[]>([]);
+  const [editingDisponibilidadId, setEditingDisponibilidadId] = useState('');
+  const [dispFecha, setDispFecha] = useState(() => toIsoDate(new Date()));
+  const [dispHoraInicio, setDispHoraInicio] = useState('09:00');
+  const [dispHoraFin, setDispHoraFin] = useState('12:00');
+  const [dispModalidad, setDispModalidad] = useState<'presencial' | 'virtual' | 'ambas'>('ambas');
+  const [dispSlotMinutos, setDispSlotMinutos] = useState<15 | 20 | 30 | 60>(30);
+  const [dispBloqueado, setDispBloqueado] = useState(false);
+  const lastRefreshRef = React.useRef(0);
+  const socketRef = React.useRef<Socket | null>(null);
 
   const loadUser = useCallback(async () => {
     setLoadingUser(true);
@@ -197,7 +244,7 @@ const MedicoCitasScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl('/api/users/me/citas?scope=all&limit=120'), {
+      const response = await fetch(apiUrl('/api/agenda/me/citas?scope=all&limit=160'), {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -214,11 +261,126 @@ const MedicoCitasScreen: React.FC = () => {
     }
   }, []);
 
+  const loadDisponibilidades = useCallback(async () => {
+    setLoadingDisponibilidades(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setDisponibilidades([]);
+        return;
+      }
+
+      const now = new Date();
+      const from = toIsoDate(now);
+      const to = toIsoDate(new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000));
+      const response = await fetch(
+        apiUrl(`/api/agenda/medico/me/disponibilidades?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const payload = await response.json().catch(() => null);
+      if (!(response.ok && payload?.success && Array.isArray(payload?.disponibilidades))) {
+        setDisponibilidades([]);
+        return;
+      }
+
+      const normalized = (payload.disponibilidades as any[])
+        .map((item) => {
+          const id = normalizeText(item?.id);
+          if (!id) return null;
+          const modalidadRaw = normalizeText(item?.modalidad).toLowerCase();
+          const modalidad =
+            modalidadRaw === 'virtual' || modalidadRaw === 'presencial' || modalidadRaw === 'ambas'
+              ? (modalidadRaw as 'presencial' | 'virtual' | 'ambas')
+              : 'ambas';
+          const slotMin = Number(item?.slotMinutos || 30);
+          return {
+            id,
+            fechaInicio: item?.fechaInicio || null,
+            fechaFin: item?.fechaFin || null,
+            modalidad,
+            slotMinutos: Number.isFinite(slotMin) ? slotMin : 30,
+            activo: Boolean(item?.activo),
+            bloqueado: Boolean(item?.bloqueado),
+            especialidad: normalizeText(item?.especialidad),
+            nota: normalizeText(item?.nota),
+          } as DisponibilidadItem;
+        })
+        .filter((item: DisponibilidadItem | null): item is DisponibilidadItem => Boolean(item))
+        .sort((a, b) => parseDateMs(a.fechaInicio) - parseDateMs(b.fechaInicio));
+
+      setDisponibilidades(normalized);
+    } catch {
+      setDisponibilidades([]);
+    } finally {
+      setLoadingDisponibilidades(false);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current < MIN_REFRESH_INTERVAL_MS) {
+        return;
+      }
+      lastRefreshRef.current = now;
       loadUser();
       loadCitas();
-    }, [loadCitas, loadUser])
+      loadDisponibilidades();
+    }, [loadCitas, loadDisponibilidades, loadUser])
+  );
+
+  const upsertCita = useCallback((nextCita: CitaItem) => {
+    if (!nextCita?.citaid) return;
+    setCitas((prev) => {
+      const idx = prev.findIndex((item) => item.citaid === nextCita.citaid);
+      if (idx === -1) return [nextCita, ...prev];
+      const next = [...prev];
+      next[idx] = { ...prev[idx], ...nextCita };
+      return next;
+    });
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      const initSocket = async () => {
+        const token = await getAuthToken();
+        if (!mounted || !token) return;
+
+        const socket = io(BACKEND_URL, {
+          transports: ['websocket'],
+          auth: { token },
+        });
+        socketRef.current = socket;
+
+        const onCitaEvent = (payload: any) => {
+          const citaPayload = payload?.cita as CitaItem | undefined;
+          if (citaPayload?.citaid) {
+            upsertCita(citaPayload);
+          } else {
+            loadCitas();
+          }
+        };
+
+        socket.on('cita_creada', onCitaEvent);
+        socket.on('cita_actualizada', onCitaEvent);
+        socket.on('cita_cancelada', onCitaEvent);
+        socket.on('cita_reprogramada', onCitaEvent);
+      };
+
+      initSocket();
+      return () => {
+        mounted = false;
+        if (socketRef.current) {
+          socketRef.current.removeAllListeners();
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
+      };
+    }, [loadCitas, upsertCita])
   );
 
   const doctorName = useMemo(() => {
@@ -247,7 +409,8 @@ const MedicoCitasScreen: React.FC = () => {
       const patient = normalizeText(item?.paciente?.nombreCompleto).toLowerCase();
       const estado = normalizeText(item?.estado).toLowerCase();
       const nota = normalizeText(item?.nota).toLowerCase();
-      return patient.includes(q) || estado.includes(q) || nota.includes(q);
+      const modalidad = normalizeText(item?.modalidad).toLowerCase();
+      return patient.includes(q) || estado.includes(q) || nota.includes(q) || modalidad.includes(q);
     });
   }, [citas, searchText]);
 
@@ -264,6 +427,171 @@ const MedicoCitasScreen: React.FC = () => {
       .filter((item) => parseDateMs(item?.fechaHoraInicio) < now)
       .sort((a, b) => parseDateMs(b?.fechaHoraInicio) - parseDateMs(a?.fechaHoraInicio));
   }, [filteredCitas]);
+
+  const resetDisponibilidadForm = useCallback(() => {
+    setEditingDisponibilidadId('');
+    setDispFecha(toIsoDate(new Date()));
+    setDispHoraInicio('09:00');
+    setDispHoraFin('12:00');
+    setDispModalidad('ambas');
+    setDispSlotMinutos(30);
+    setDispBloqueado(false);
+  }, []);
+
+  const startEditDisponibilidad = useCallback((item: DisponibilidadItem) => {
+    setEditingDisponibilidadId(item.id);
+    setDispFecha(toIsoDate(new Date(item.fechaInicio || Date.now())));
+    setDispHoraInicio(toHourMinute(item.fechaInicio) || '09:00');
+    setDispHoraFin(toHourMinute(item.fechaFin) || '12:00');
+    setDispModalidad(item.modalidad || 'ambas');
+    const nextSlot = Number(item.slotMinutos);
+    if (nextSlot === 15 || nextSlot === 20 || nextSlot === 30 || nextSlot === 60) {
+      setDispSlotMinutos(nextSlot);
+    } else {
+      setDispSlotMinutos(30);
+    }
+    setDispBloqueado(Boolean(item.bloqueado));
+  }, []);
+
+  const saveDisponibilidad = useCallback(async () => {
+    if (!dispFecha || !/^\d{4}-\d{2}-\d{2}$/.test(dispFecha)) {
+      Alert.alert('Fecha invalida', 'Usa formato YYYY-MM-DD.');
+      return;
+    }
+    if (!/^\d{2}:\d{2}$/.test(dispHoraInicio) || !/^\d{2}:\d{2}$/.test(dispHoraFin)) {
+      Alert.alert('Hora invalida', 'Usa formato HH:mm para inicio y fin.');
+      return;
+    }
+
+    setSavingDisponibilidad(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        Alert.alert('Sesion expirada', 'Inicia sesion nuevamente.');
+        return;
+      }
+
+      const payload = {
+        fecha: dispFecha,
+        horaInicio: dispHoraInicio,
+        horaFin: dispHoraFin,
+        modalidad: dispModalidad,
+        slotMinutos: dispSlotMinutos,
+        bloqueado: dispBloqueado,
+        activo: true,
+      };
+      const endpoint = editingDisponibilidadId
+        ? `/api/agenda/medico/me/disponibilidades/${editingDisponibilidadId}`
+        : '/api/agenda/medico/me/disponibilidades';
+      const method = editingDisponibilidadId ? 'PUT' : 'POST';
+
+      const response = await fetch(apiUrl(endpoint), {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body?.success) {
+        Alert.alert('No se pudo guardar', body?.message || 'Revisa los datos e intenta nuevamente.');
+        return;
+      }
+
+      await loadDisponibilidades();
+      resetDisponibilidadForm();
+      Alert.alert('Disponibilidad guardada', 'El bloque horario se actualizo correctamente.');
+    } catch {
+      Alert.alert('Error', 'No se pudo guardar la disponibilidad.');
+    } finally {
+      setSavingDisponibilidad(false);
+    }
+  }, [
+    dispBloqueado,
+    dispFecha,
+    dispHoraFin,
+    dispHoraInicio,
+    dispModalidad,
+    dispSlotMinutos,
+    editingDisponibilidadId,
+    loadDisponibilidades,
+    resetDisponibilidadForm,
+  ]);
+
+  const toggleBloqueoDisponibilidad = useCallback(
+    async (item: DisponibilidadItem) => {
+      setWorkingCitaId(`disp-block-${item.id}`);
+      try {
+        const token = await getAuthToken();
+        if (!token) {
+          Alert.alert('Sesion expirada', 'Inicia sesion nuevamente.');
+          return;
+        }
+
+        const response = await fetch(apiUrl(`/api/agenda/medico/me/disponibilidades/${item.id}/bloquear`), {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ bloqueado: !item.bloqueado }),
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.success) {
+          Alert.alert('No se pudo actualizar', payload?.message || 'Intenta nuevamente.');
+          return;
+        }
+
+        setDisponibilidades((prev) =>
+          prev.map((row) => (row.id === item.id ? { ...row, bloqueado: !row.bloqueado } : row))
+        );
+      } catch {
+        Alert.alert('Error', 'No se pudo actualizar el bloqueo.');
+      } finally {
+        setWorkingCitaId('');
+      }
+    },
+    []
+  );
+
+  const toggleActivoDisponibilidad = useCallback(
+    async (item: DisponibilidadItem) => {
+      setWorkingCitaId(`disp-active-${item.id}`);
+      try {
+        const token = await getAuthToken();
+        if (!token) {
+          Alert.alert('Sesion expirada', 'Inicia sesion nuevamente.');
+          return;
+        }
+
+        const response = await fetch(apiUrl(`/api/agenda/medico/me/disponibilidades/${item.id}`), {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            activo: !item.activo,
+          }),
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.success) {
+          Alert.alert('No se pudo actualizar', payload?.message || 'Intenta nuevamente.');
+          return;
+        }
+
+        setDisponibilidades((prev) =>
+          prev.map((row) => (row.id === item.id ? { ...row, activo: !row.activo } : row))
+        );
+      } catch {
+        Alert.alert('Error', 'No se pudo actualizar el estado.');
+      } finally {
+        setWorkingCitaId('');
+      }
+    },
+    []
+  );
 
   const dateText = useMemo(
     () =>
@@ -294,13 +622,36 @@ const MedicoCitasScreen: React.FC = () => {
           return;
         }
 
-        const response = await fetch(apiUrl(`/api/users/me/citas/${cita.citaid}/manage`), {
+        let endpoint = '';
+        let body: Record<string, unknown> = {};
+        if (action === 'reschedule') {
+          const currentStart = cita?.fechaHoraInicio ? new Date(cita.fechaHoraInicio) : new Date();
+          const nextStart = new Date(currentStart.getTime() + 24 * 60 * 60 * 1000);
+          endpoint = `/api/agenda/me/citas/${cita.citaid}/reprogramar`;
+          body = {
+            fechaHoraInicio: nextStart.toISOString(),
+            motivo: 'Reprogramada desde panel medico',
+          };
+        } else if (action === 'complete') {
+          endpoint = `/api/agenda/me/citas/${cita.citaid}/estado`;
+          body = {
+            estado: 'completada',
+            motivo: 'Marcada como completada por medico',
+          };
+        } else {
+          endpoint = `/api/agenda/me/citas/${cita.citaid}/cancelar`;
+          body = {
+            motivo: 'Cancelada desde panel medico',
+          };
+        }
+
+        const response = await fetch(apiUrl(endpoint), {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ action }),
+          body: JSON.stringify(body),
         });
         const payload = await response.json().catch(() => null);
         if (!response.ok || !payload?.success) {
@@ -308,22 +659,78 @@ const MedicoCitasScreen: React.FC = () => {
           return;
         }
 
-        await loadCitas();
+        if (payload?.cita) {
+          upsertCita(payload.cita as CitaItem);
+        } else {
+          await loadCitas();
+        }
       } catch {
         Alert.alert('Error', 'No se pudo completar la accion.');
       } finally {
         setWorkingCitaId('');
       }
     },
-    [loadCitas]
+    [loadCitas, upsertCita]
   );
+
+  const openVideoSala = useCallback(async (cita: CitaItem) => {
+    if (normalizeText(cita?.modalidad).toLowerCase() !== 'virtual') {
+      Alert.alert('Consulta presencial', 'Esta cita no tiene videollamada habilitada.');
+      return;
+    }
+
+    setWorkingCitaId(cita.citaid);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        Alert.alert('Sesion expirada', 'Inicia sesion nuevamente.');
+        return;
+      }
+
+      const response = await fetch(apiUrl(`/api/agenda/me/citas/${cita.citaid}/video-sala/abrir`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success || !payload?.videoSala?.joinUrl) {
+        Alert.alert('No disponible', payload?.message || 'No se pudo abrir la videollamada.');
+        return;
+      }
+
+      const joinUrl = String(payload.videoSala.joinUrl || '').trim();
+      if (!joinUrl) {
+        Alert.alert('No disponible', 'La sala aun no tiene URL de acceso.');
+        return;
+      }
+
+      if (Platform.OS === 'web') {
+        const webOpen = (globalThis as any)?.open;
+        if (typeof webOpen === 'function') {
+          webOpen(joinUrl, '_blank');
+        } else {
+          await Linking.openURL(joinUrl);
+        }
+      } else {
+        await Linking.openURL(joinUrl);
+      }
+    } catch {
+      Alert.alert('Error', 'No se pudo abrir la videollamada.');
+    } finally {
+      setWorkingCitaId('');
+    }
+  }, []);
 
   const showDetails = (cita: CitaItem) => {
     Alert.alert(
       'Detalle de cita',
       `Paciente: ${normalizeText(cita?.paciente?.nombreCompleto || 'Paciente')}\nEstado: ${normalizeText(
         cita?.estado || 'Pendiente'
-      )}\nHora: ${formatDateTime(cita?.fechaHoraInicio)}\nNota: ${normalizeText(cita?.nota || 'Sin nota')}`
+      )}\nModalidad: ${normalizeText(cita?.modalidad || 'presencial')}\nHora: ${formatDateTime(
+        cita?.fechaHoraInicio
+      )}\nNota: ${normalizeText(cita?.nota || 'Sin nota')}`
     );
   };
 
@@ -450,6 +857,171 @@ const MedicoCitasScreen: React.FC = () => {
         </View>
 
         <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle}>Disponibilidad</Text>
+          <Text style={styles.sectionCount}>{disponibilidades.length}</Text>
+        </View>
+        <View style={styles.sectionCard}>
+          <View style={styles.availabilityFormGrid}>
+            <View style={styles.availabilityField}>
+              <Text style={styles.availabilityLabel}>Fecha (YYYY-MM-DD)</Text>
+              <TextInput
+                value={dispFecha}
+                onChangeText={setDispFecha}
+                style={styles.availabilityInput}
+                placeholder="2026-03-20"
+                placeholderTextColor="#8ca7bd"
+              />
+            </View>
+            <View style={styles.availabilityField}>
+              <Text style={styles.availabilityLabel}>Hora inicio</Text>
+              <TextInput
+                value={dispHoraInicio}
+                onChangeText={setDispHoraInicio}
+                style={styles.availabilityInput}
+                placeholder="09:00"
+                placeholderTextColor="#8ca7bd"
+              />
+            </View>
+            <View style={styles.availabilityField}>
+              <Text style={styles.availabilityLabel}>Hora fin</Text>
+              <TextInput
+                value={dispHoraFin}
+                onChangeText={setDispHoraFin}
+                style={styles.availabilityInput}
+                placeholder="12:00"
+                placeholderTextColor="#8ca7bd"
+              />
+            </View>
+          </View>
+
+          <Text style={styles.availabilityLabel}>Modalidad del bloque</Text>
+          <View style={styles.actionsRow}>
+            {(['ambas', 'virtual', 'presencial'] as const).map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                style={[
+                  styles.secondaryAction,
+                  dispModalidad === mode && styles.availabilityModeActive,
+                ]}
+                onPress={() => setDispModalidad(mode)}
+              >
+                <Text
+                  style={[
+                    styles.secondaryActionText,
+                    dispModalidad === mode && styles.availabilityModeActiveText,
+                  ]}
+                >
+                  {mode}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.availabilityLabel}>Duracion por slot</Text>
+          <View style={styles.actionsRow}>
+            {([15, 20, 30, 60] as const).map((minutes) => (
+              <TouchableOpacity
+                key={minutes}
+                style={[
+                  styles.secondaryAction,
+                  dispSlotMinutos === minutes && styles.availabilityModeActive,
+                ]}
+                onPress={() => setDispSlotMinutos(minutes)}
+              >
+                <Text
+                  style={[
+                    styles.secondaryActionText,
+                    dispSlotMinutos === minutes && styles.availabilityModeActiveText,
+                  ]}
+                >
+                  {minutes} min
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={[styles.secondaryAction, dispBloqueado && styles.availabilityModeActive]}
+              onPress={() => setDispBloqueado((prev) => !prev)}
+            >
+              <Text
+                style={[
+                  styles.secondaryActionText,
+                  dispBloqueado && styles.availabilityModeActiveText,
+                ]}
+              >
+                {dispBloqueado ? 'Bloqueado' : 'Disponible'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.primaryAction, savingDisponibilidad && styles.secondaryActionDisabled]}
+              onPress={saveDisponibilidad}
+              disabled={savingDisponibilidad}
+            >
+              {savingDisponibilidad ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <MaterialIcons name="save" size={16} color="#fff" />
+                  <Text style={styles.primaryActionText}>
+                    {editingDisponibilidadId ? 'Actualizar bloque' : 'Crear bloque'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {editingDisponibilidadId ? (
+              <TouchableOpacity style={styles.secondaryAction} onPress={resetDisponibilidadForm}>
+                <Text style={styles.secondaryActionText}>Cancelar edicion</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {loadingDisponibilidades ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : disponibilidades.length ? (
+            disponibilidades.slice(0, 40).map((item) => (
+              <View key={`disp-${item.id}`} style={styles.availabilityRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.historyName}>
+                    {formatDateTime(item.fechaInicio)} - {formatDateTime(item.fechaFin)}
+                  </Text>
+                  <Text style={styles.historySub}>
+                    {normalizeText(item.especialidad || doctorSpec)} · {item.modalidad} · {item.slotMinutos} min
+                  </Text>
+                  <Text style={styles.historySub}>
+                    {item.activo ? 'Activo' : 'Inactivo'} · {item.bloqueado ? 'Bloqueado' : 'Disponible'}
+                  </Text>
+                </View>
+                <TouchableOpacity style={styles.smallAction} onPress={() => startEditDisponibilidad(item)}>
+                  <Text style={styles.smallActionText}>Editar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.smallAction}
+                  disabled={workingCitaId === `disp-block-${item.id}`}
+                  onPress={() => toggleBloqueoDisponibilidad(item)}
+                >
+                  <Text style={styles.smallActionText}>
+                    {item.bloqueado ? 'Desbloquear' : 'Bloquear'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.smallAction}
+                  disabled={workingCitaId === `disp-active-${item.id}`}
+                  onPress={() => toggleActivoDisponibilidad(item)}
+                >
+                  <Text style={styles.smallActionText}>{item.activo ? 'Desactivar' : 'Activar'}</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>Aun no has configurado bloques de disponibilidad.</Text>
+          )}
+        </View>
+
+        <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>Proximas citas</Text>
           <Text style={styles.sectionCount}>{upcomingCitas.length}</Text>
         </View>
@@ -463,7 +1035,8 @@ const MedicoCitasScreen: React.FC = () => {
                   <View style={styles.citaMeta}>
                     <Text style={styles.citaPatient}>{normalizeText(cita?.paciente?.nombreCompleto || 'Paciente')}</Text>
                     <Text style={styles.citaSub}>
-                      {normalizeText(cita?.estado || 'Pendiente')} · {formatDateTime(cita?.fechaHoraInicio)}
+                      {normalizeText(cita?.estado || 'Pendiente')} · {formatDateTime(cita?.fechaHoraInicio)} ·{' '}
+                      {normalizeText(cita?.modalidad || 'presencial')}
                     </Text>
                     <Text style={styles.citaNote}>
                       {normalizeText(cita?.nota || 'Consulta programada sin nota adicional.')}
@@ -472,14 +1045,16 @@ const MedicoCitasScreen: React.FC = () => {
                 </View>
                 <View style={styles.actionsRow}>
                   <TouchableOpacity
-                    style={styles.primaryAction}
-                    onPress={() =>
-                      Alert.alert(
-                        'Videollamada',
-                        `Paciente: ${normalizeText(cita?.paciente?.nombreCompleto || 'Paciente')}\nHora: ${formatDateTime(
-                          cita?.fechaHoraInicio
-                        )}`
-                      )
+                    style={[
+                      styles.primaryAction,
+                      (normalizeText(cita?.modalidad).toLowerCase() !== 'virtual' ||
+                        workingCitaId === cita.citaid) &&
+                        styles.secondaryActionDisabled,
+                    ]}
+                    onPress={() => openVideoSala(cita)}
+                    disabled={
+                      normalizeText(cita?.modalidad).toLowerCase() !== 'virtual' ||
+                      workingCitaId === cita.citaid
                     }
                   >
                     <MaterialIcons name="videocam" size={16} color="#fff" />
@@ -683,6 +1258,49 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   searchInput: { flex: 1, color: colors.dark, fontSize: 14, fontWeight: '600', paddingVertical: 4 },
+  availabilityFormGrid: {
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  availabilityField: {
+    flex: Platform.OS === 'web' ? 1 : 0,
+    minWidth: Platform.OS === 'web' ? 180 : 0,
+  },
+  availabilityLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  availabilityInput: {
+    borderWidth: 1,
+    borderColor: '#d6e4f3',
+    backgroundColor: '#f9fbff',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: colors.dark,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  availabilityModeActive: {
+    backgroundColor: 'rgba(19,127,236,0.14)',
+    borderColor: colors.primary,
+  },
+  availabilityModeActiveText: {
+    color: colors.primary,
+  },
+  availabilityRow: {
+    borderWidth: 1,
+    borderColor: '#e8eff8',
+    borderRadius: 10,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   sectionHead: {
     marginHorizontal: Platform.OS === 'web' ? 32 : 14,
     marginTop: 12,
@@ -724,6 +1342,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
   },
+  secondaryActionDisabled: {
+    opacity: 0.55,
+  },
   primaryActionText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   secondaryAction: {
     borderWidth: 1,
@@ -758,3 +1379,4 @@ const styles = StyleSheet.create({
 });
 
 export default MedicoCitasScreen;
+
