@@ -26,7 +26,7 @@ import * as SecureStore from "expo-secure-store";
 import { RootStackParamList } from "./navigation/types";
 import { apiUrl } from "./config/backend";
 
-// Tipado navegaciÃÂ³n
+// Tipado navegación
 type NavigationProps = NativeStackNavigationProp<RootStackParamList, "RegistroMedico">;
 
 interface CountryCodeType {
@@ -39,35 +39,35 @@ const ViremLogo = require("./assets/imagenes/descarga.png");
 const { width } = Dimensions.get("window");
 const MEDICO_DRAFT_PREFIX = "medicoRegDraft:";
 
-// Prefijos + mÃÂ¡scara
+// Prefijos + máscara
 const countryCodes: CountryCodeType[] = [
-  { code: "+1", name: "RepÃÂºblica Dominicana", mask: "XXX XXX XXXX" },
+  { code: "+1", name: "República Dominicana", mask: "XXX XXX XXXX" },
   { code: "+593", name: "Ecuador", mask: "XX XXX XXXX" },
   { code: "+1", name: "USA/CAN", mask: "XXX XXX XXXX" },
   { code: "+506", name: "Costa Rica", mask: "XXXX XXXX" },
-  { code: "+34", name: "EspaÃÂ±a", mask: "XXX XX XX XX" },
+  { code: "+34", name: "España", mask: "XXX XX XX XX" },
 ];
 
 // Especialidades
 const ESPECIALIDADES = [
   "Medicina General",
-  "PsicologÃÂ­a",
-  "PsiquiatrÃÂ­a",
-  "GinecologÃÂ­a",
-  "PediatrÃÂ­a",
-  "DermatologÃÂ­a",
-  "OdontologÃÂ­a",
-  "NutriciÃÂ³n",
-  "NeurologÃÂ­a",
-  "NeumologÃÂ­a",
-  "InfectologÃÂ­a",
-  "EndocrinologÃÂ­a",
-  "ReumatologÃÂ­a",
+  "Psicología",
+  "Psiquiatría",
+  "Ginecología",
+  "Pediatría",
+  "Dermatología",
+  "Odontología",
+  "Nutrición",
+  "Neurología",
+  "Neumología",
+  "Infectología",
+  "Endocrinología",
+  "Reumatología",
   "Medicina Familiar",
 ];
 
 // =========================================
-// VALIDACIÃâN: Fecha real (no futura / no imposible / no >120 aÃÂ±os)
+// VALIDACION: Fecha real (no futura / no imposible / no >120 anos)
 // =========================================
 const esFechaValida = (fechaStr: string) => {
   if (fechaStr.length !== 10) return false;
@@ -91,7 +91,7 @@ const esFechaValida = (fechaStr: string) => {
 };
 
 // =========================================
-// VALIDACIÃâN: Solo mayores de 18
+// VALIDACION: Solo mayores de 18
 // =========================================
 const esMayorDe18 = (fechaStr: string) => {
   if (!esFechaValida(fechaStr)) return false;
@@ -110,7 +110,7 @@ const esMayorDe18 = (fechaStr: string) => {
 };
 
 // =========================================
-// VALIDACIÃâN: CÃÂ©dula Dominicana (limpia guiones y valida dÃÂ­gito verificador)
+// VALIDACION: Cedula Dominicana (limpia guiones y valida digito verificador)
 // =========================================
 const validarCedulaDominicana = (cedula: string) => {
   const c = cedula.replace(/\D/g, "");
@@ -131,7 +131,7 @@ const validarCedulaDominicana = (cedula: string) => {
 // HELPERS
 // =========================================
 const filterOnlyLetters = (text: string) =>
-  text.replace(/[^a-zA-ZÃÂ¡ÃÂ©ÃÂ­ÃÂ³ÃÂºÃÂÃâ°ÃÂÃâÃÅ¡ÃÂ±Ãâ ]/g, "");
+  text.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ ]/g, "");
 
 const applyPhoneMask = (text: string, mask: string) => {
   const digits = text.replace(/\D/g, "");
@@ -225,7 +225,7 @@ const persistMedicoDraft = async (draftKey: string, payload: Record<string, any>
   }
 };
 // =========================================
-// FORMATO: CÃÂ©dula RD XXX-XXXXXXX-X
+// FORMATO: Cédula RD XXX-XXXXXXX-X
 // =========================================
 const formatCedulaRD = (text: string) => {
   const digits = text.replace(/\D/g, "").slice(0, 11);
@@ -239,7 +239,7 @@ const formatCedulaRD = (text: string) => {
 };
 
 // =========================================
-// API para validar telÃÂ©fono
+// API para validar teléfono
 // Endpoint: POST /api/validar-telefono
 // =========================================
 type ValidacionTelefonoBackendOk = { ok: true; meta?: any };
@@ -273,7 +273,7 @@ const validarTelefonoBackend = async (
     if (!data.valid) {
       return {
         ok: false as const,
-        reason: "El nÃÂºmero no es vÃÂ¡lido segÃÂºn Veriphone.",
+        reason: "El número no es válido según Veriphone.",
       };
     }
 
@@ -287,7 +287,7 @@ const validarTelefonoBackend = async (
 };
 
 // =========================================
-// Ã¢Åâ¦ API EXEQUÃÂTUR SOLO POR NOMBRE COMPLETO
+// API EXEQUATUR SOLO POR NOMBRE COMPLETO
 // Endpoint: POST /api/validar-exequatur
 // Body: { nombreCompleto: "..." }
 // =========================================
@@ -324,15 +324,15 @@ const validarExequaturPorNombre = async (
 
       return {
         ok: false as const,
-        reason: data?.message || `No se pudo validar ExequÃÂ¡tur (HTTP ${res.status}).`,
+        reason: data?.message || `No se pudo validar Exequátur (HTTP ${res.status}).`,
       };
     }
 
     if (!data.exists) {
       const suggestedName = String(data?.match?.candidateName || "").trim();
       const reason = suggestedName
-        ? `No se encontrÃ³ coincidencia exacta en el ExequÃ¡tur del SNS. Nombre similar encontrado: ${suggestedName}. Verifica el nombre completo tal como aparece en el SNS.`
-        : "Este mÃ©dico no aparece en el ExequÃ¡tur del SNS. Verifica el nombre completo tal como aparece en el SNS.";
+        ? `No se encontro coincidencia exacta en el Exequatur del SNS. Nombre similar encontrado: ${suggestedName}. Verifica el nombre completo tal como aparece en el SNS.`
+        : "Este medico no aparece en el Exequatur del SNS. Verifica el nombre completo tal como aparece en el SNS.";
 
       return {
         ok: false as const,
@@ -344,7 +344,7 @@ const validarExequaturPorNombre = async (
   } catch {
     return {
       ok: false as const,
-      reason: "Error de red: no se pudo consultar el ExequÃÂ¡tur.",
+      reason: "Error de red: no se pudo consultar el Exequátur.",
     };
   }
 };
@@ -620,7 +620,7 @@ const RegistroMedicoScreen: React.FC = () => {
   const [phone, setPhone] = useState("");
   const [selectedCountryCode, setSelectedCountryCode] = useState<CountryCodeType>(countryCodes[0]);
 
-  // MÃÂ©dico
+  // Médico
   const [especialidad, setEspecialidad] = useState("");
   const [showEspModal, setShowEspModal] = useState(false);
   const [espQuery, setEspQuery] = useState("");
@@ -715,13 +715,13 @@ const RegistroMedicoScreen: React.FC = () => {
         if (!ok) {
           setFotoUri("");
           setFotoError(true);
-          Alert.alert("Foto no vÃÂ¡lida", "Selecciona una foto donde se vea claramente el rostro de una persona.");
+          Alert.alert("Foto no válida", "Selecciona una foto donde se vea claramente el rostro de una persona.");
           return;
         }
       }
     } catch {
       setIsLoading(false);
-      Alert.alert("Error", "No se pudo abrir el selector de imÃÂ¡genes.");
+      Alert.alert("Error", "No se pudo abrir el selector de imágenes.");
     }
   };
 
@@ -737,29 +737,29 @@ const RegistroMedicoScreen: React.FC = () => {
 
     if (!fotoUri) {
       setFotoError(true);
-      Alert.alert("AcciÃÂ³n Requerida", "Debes subir una foto (rostro visible).");
+      Alert.alert("Acción Requerida", "Debes subir una foto (rostro visible).");
       return;
     }
 
     if (!isFormComplete) {
-      Alert.alert("AcciÃÂ³n Requerida", "Debe completar todos los datos del mÃÂ©dico.");
+      Alert.alert("Acción Requerida", "Debe completar todos los datos del médico.");
       return;
     }
 
     if (!esFechaValida(birthDate)) {
       setFechaError(true);
-      Alert.alert("Fecha InvÃÂ¡lida", "La fecha de nacimiento no es real o es incorrecta.");
+      Alert.alert("Fecha Inválida", "La fecha de nacimiento no es real o es incorrecta.");
       return;
     }
 
     if (!esMayorDe18(birthDate)) {
       setFechaMayor18Error(true);
-      Alert.alert("Edad no permitida", "El mÃÂ©dico debe ser mayor de 18 aÃÂ±os.");
+      Alert.alert("Edad no permitida", "El médico debe ser mayor de 18 años.");
       return;
     }
 
-    // ValidaciÃÂ³n cÃÂ©dula RD (esta es SOLO local, NO ExequÃÂ¡tur)
-    if (selectedCountryCode.name === "RepÃÂºblica Dominicana") {
+    // Validación cédula RD (esta es SOLO local, NO Exequátur)
+    if (selectedCountryCode.name === "República Dominicana") {
       setIsLoading(true);
       await new Promise((r) => setTimeout(r, 250));
       const ok = validarCedulaDominicana(cedula);
@@ -767,28 +767,28 @@ const RegistroMedicoScreen: React.FC = () => {
 
       if (!ok) {
         setCedulaError(true);
-        Alert.alert("CÃÂ©dula InvÃÂ¡lida", "El nÃÂºmero de cÃÂ©dula no es vÃÂ¡lido.");
+        Alert.alert("Cédula Inválida", "El número de cédula no es válido.");
         return;
       }
     }
 
-    // Ã¢Åâ¦ ValidaciÃÂ³n telÃÂ©fono
+    // Validacion telefono
     setIsLoading(true);
     const tel = await validarTelefonoBackend(selectedCountryCode.code, phone);
     setIsLoading(false);
 
     if (tel.ok === false) {
       setTelefonoError(tel.reason);
-      Alert.alert("TelÃÂ©fono invÃÂ¡lido", tel.reason);
+      Alert.alert("Teléfono inválido", tel.reason);
       return;
     }
 
-    // Ã¢Åâ¦ ExequÃÂ¡tur SOLO por nombre completo
+    // Exequatur SOLO por nombre completo
     const nombreCompletoTrim = nombreCompleto.replace(/\s+/g, " ").trim();
 
     if (nombreCompletoTrim.split(/\s+/).filter(Boolean).length < 2) {
       setExequaturError("Verifica el nombre completo tal como aparece en el SNS.");
-      Alert.alert("Nombre requerido", "Escribe el nombre completo tal como aparece en el ExequÃÂ¡tur del SNS.");
+      Alert.alert("Nombre requerido", "Escribe el nombre completo tal como aparece en el Exequátur del SNS.");
       return;
     }
 
@@ -798,7 +798,7 @@ const RegistroMedicoScreen: React.FC = () => {
 
     if (exq.ok === false) {
       setExequaturError(exq.reason);
-      Alert.alert("MÃÂ©dico no verificado", exq.reason);
+      Alert.alert("Médico no verificado", exq.reason);
       return;
     }
 
@@ -843,7 +843,7 @@ const RegistroMedicoScreen: React.FC = () => {
             <Image source={ViremLogo} style={styles.logoImage} />
             <View>
               <Text style={styles.logoText}>VIREM</Text>
-              <Text style={styles.logoSubtitle}>GestiÃÂ³n MÃÂ©dica</Text>
+              <Text style={styles.logoSubtitle}>Gestión Médica</Text>
             </View>
           </View>
         </View>
@@ -852,18 +852,18 @@ const RegistroMedicoScreen: React.FC = () => {
       <ScrollView style={styles.mainContent} keyboardShouldPersistTaps="handled">
         <View style={styles.contentWrapper}>
           <View style={styles.breadcrumbs}>
-            <Text style={styles.breadcrumbLink}>MÃÂ©dicos</Text>
+            <Text style={styles.breadcrumbLink}>Médicos</Text>
             <MaterialIcons name="chevron-right" size={16} style={styles.breadcrumbSeparator} />
-            <Text style={styles.breadcrumbCurrent}>Registro de MÃÂ©dico</Text>
+            <Text style={styles.breadcrumbCurrent}>Registro de Médico</Text>
           </View>
 
           <View style={{ gap: 8, alignItems: "center" }}>
-            <Text style={styles.pageTitle}>Nuevo MÃÂ©dico</Text>
+            <Text style={styles.pageTitle}>Nuevo Médico</Text>
           </View>
 
           <View style={styles.formCard}>
             <View style={styles.progressHeader}>
-              <Text style={styles.progressTitle}>InformaciÃÂ³n del MÃÂ©dico</Text>
+              <Text style={styles.progressTitle}>Información del Médico</Text>
               <Text style={styles.progressPercent}>
                 {progressPercent}
                 % Completado
@@ -915,7 +915,7 @@ const RegistroMedicoScreen: React.FC = () => {
                       styles.inputField,
                       (showErrors && !nombreCompleto) || !!exequaturError ? styles.inputError : null,
                     ]}
-                    placeholder="Ej. Juan Alberto PÃÂ©rez"
+                    placeholder="Ej. Juan Alberto Pérez"
                     value={nombreCompleto}
                     onChangeText={(t) => {
                       setNombreCompleto(filterOnlyLetters(t));
@@ -928,7 +928,7 @@ const RegistroMedicoScreen: React.FC = () => {
 
               <View style={styles.formRow}>
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.inputLabel}>CÃÂ©dula (IdentificaciÃÂ³n)</Text>
+                  <Text style={styles.inputLabel}>Cédula (Identificación)</Text>
                   <TextInput
                     style={[
                       styles.inputField,
@@ -943,11 +943,11 @@ const RegistroMedicoScreen: React.FC = () => {
                     }}
                     maxLength={13}
                   />
-                  {cedulaError && <Text style={styles.errorText}>CÃÂ©dula no vÃÂ¡lida</Text>}
+                  {cedulaError && <Text style={styles.errorText}>Cédula no válida</Text>}
                 </View>
 
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.inputLabel}>GÃÂ©nero</Text>
+                  <Text style={styles.inputLabel}>Género</Text>
                   <TouchableOpacity
                     style={[styles.selectInput, showErrors && !gender && styles.inputError]}
                     onPress={() => setShowGenderModal(true)}
@@ -962,7 +962,7 @@ const RegistroMedicoScreen: React.FC = () => {
 
               <View style={styles.formRow}>
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.inputLabel}>TelÃÂ©fono</Text>
+                  <Text style={styles.inputLabel}>Teléfono</Text>
                   <View style={[styles.phoneInputGroup, showErrors && !phone && styles.inputError]}>
                     <TouchableOpacity style={styles.prefixButton} onPress={() => setShowPrefixModal(true)}>
                       <Text style={styles.prefixText}>{selectedCountryCode.code}</Text>
@@ -1001,7 +1001,7 @@ const RegistroMedicoScreen: React.FC = () => {
                     maxLength={10}
                   />
                   {fechaError && <Text style={styles.errorText}>Fecha inexistente o futura</Text>}
-                  {fechaMayor18Error && <Text style={styles.errorText}>Debe ser mayor de 18 aÃÂ±os</Text>}
+                  {fechaMayor18Error && <Text style={styles.errorText}>Debe ser mayor de 18 años</Text>}
                 </View>
               </View>
 
@@ -1056,7 +1056,7 @@ const RegistroMedicoScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* MODAL GÃâ°NERO */}
+      {/* MODAL GENERO */}
       <Modal visible={showGenderModal} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowGenderModal(false)} activeOpacity={1}>
           <View style={styles.modalContent}>
