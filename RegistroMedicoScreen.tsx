@@ -20,7 +20,6 @@ import {
 } from "react-native";
 
 import * as ImagePicker from "expo-image-picker";
-import * as FaceDetector from "expo-face-detector";
 import * as SecureStore from "expo-secure-store";
 
 import { RootStackParamList } from "./navigation/types";
@@ -34,6 +33,22 @@ interface CountryCodeType {
   name: string;
   mask: string;
 }
+
+type FaceDetectorModule = typeof import("expo-face-detector");
+
+let cachedFaceDetectorModule: FaceDetectorModule | null | undefined;
+
+const loadFaceDetectorModule = async (): Promise<FaceDetectorModule | null> => {
+  if (cachedFaceDetectorModule !== undefined) return cachedFaceDetectorModule;
+
+  try {
+    cachedFaceDetectorModule = await import("expo-face-detector");
+  } catch {
+    cachedFaceDetectorModule = null;
+  }
+
+  return cachedFaceDetectorModule;
+};
 
 const ViremLogo = require("./assets/imagenes/descarga.png");
 const { width } = Dimensions.get("window");
@@ -666,6 +681,11 @@ const RegistroMedicoScreen: React.FC = () => {
 
   const validarQueSeaPersona = async (uri: string) => {
     if (Platform.OS === "web") return true;
+
+    const FaceDetector = await loadFaceDetectorModule();
+    if (!FaceDetector) {
+      return true;
+    }
 
     try {
       const result = await FaceDetector.detectFacesAsync(uri, {
