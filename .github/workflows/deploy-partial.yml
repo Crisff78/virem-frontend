@@ -1,0 +1,39 @@
+name: Frontend Deploy Partial
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deploy hook or simulate
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL_FRONTEND }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "No existe secret RENDER_DEPLOY_HOOK_URL_FRONTEND."
+            echo "Ejecucion en modo simulacion (despliegue parcial)."
+            exit 0
+          fi
+
+          echo "Invocando deploy hook del frontend..."
+          curl -fsS -X POST "$DEPLOY_HOOK_URL"
+          echo "Deploy hook ejecutado correctamente."
+
+      - name: URL check post deploy (opcional)
+        env:
+          FRONTEND_URL: ${{ secrets.FRONTEND_PUBLIC_URL }}
+        run: |
+          if [ -z "$FRONTEND_URL" ]; then
+            echo "No existe secret FRONTEND_PUBLIC_URL. Saltando validacion URL."
+            exit 0
+          fi
+
+          echo "Validando URL publicada..."
+          curl -I -fsS "$FRONTEND_URL"
+          echo "Validacion URL OK."

@@ -1,0 +1,41 @@
+name: Frontend CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      EXPO_NO_TELEMETRY: 1
+      CI: true
+      EXPO_PUBLIC_BACKEND_URL: http://localhost:3000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build web export
+        run: npx expo export --platform web --output-dir dist-web --clear
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-web-build
+          path: dist-web

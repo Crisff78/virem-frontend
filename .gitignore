@@ -4,6 +4,7 @@
 
 # Web build output
 web-build/
+dist-web/
 
 # Expo environment types
 expo-env.d.ts

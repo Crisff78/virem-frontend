@@ -57,3 +57,19 @@ eas build -p ios
 ```
 
 (Requires Apple/Google developer setup for store distribution.)
+
+## 5) CI/CD (GitHub Actions)
+
+- CI frontend: `.github/workflows/ci.yml`
+- Deploy parcial/simulado: `.github/workflows/deploy-partial.yml`
+
+### Build web local (igual que CI)
+
+```bash
+npx expo export --platform web --output-dir dist-web --clear
+```
+
+### Secrets opcionales para deploy real
+
+- `RENDER_DEPLOY_HOOK_URL_FRONTEND`
+- `FRONTEND_PUBLIC_URL`
