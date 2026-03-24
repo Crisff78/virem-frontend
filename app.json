@@ -26,7 +26,8 @@
       }
     },
     "web": {
-      "favicon": "./assets/imagenes/descarga.png"
+      "favicon": "./assets/imagenes/descarga.png",
+      "bundler": "metro"
     },
     "plugins": [
       "expo-font",
