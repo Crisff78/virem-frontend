@@ -17,7 +17,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { io, Socket } from 'socket.io-client';
 
 import { useLanguage } from './localization/LanguageContext';
@@ -534,7 +534,7 @@ const PacienteChatScreen: React.FC = () => {
         pressed && styles.menuItemPressed,
       ]}
     >
-      <MaterialIcons name={icon} size={20} color={active ? colors.primary : colors.muted} />
+      <MaterialIcons name={icon as any} size={20} color={active ? colors.primary : colors.muted} />
       <Text style={[styles.menuText, active && styles.menuTextActive]}>{label}</Text>
     </Pressable>
   );

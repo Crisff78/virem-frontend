@@ -15,8 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import type { RootStackParamList } from './navigation/types';
 import { apiUrl } from './config/backend';
 
@@ -183,7 +182,7 @@ const SpecialtyCardInner: React.FC<SpecialtyCardProps> = ({
     >
       <View style={[styles.specialtyIconBox, hovered && styles.specialtyIconBoxHover]}>
         <MaterialCommunityIcons
-          name={icon}
+          name={icon as any}
           size={28}
           color={hovered ? colors.white : colors.blue}
         />

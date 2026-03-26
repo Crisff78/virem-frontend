@@ -25,8 +25,7 @@ import { apiUrl } from './config/backend';
 // Nota: si usas Expo, comenta los imports de abajo y usa:
 // import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLanguage } from './localization/LanguageContext';
 import { ensurePatientSessionUser, getPatientDisplayName } from './utils/patientSession';
 
@@ -228,7 +227,7 @@ type NotificationItem = {
 const QuickAction: React.FC<QuickActionProps> = ({ icon, label, color, bg, onPress }) => (
   <TouchableOpacity style={styles.quickCard} onPress={onPress} activeOpacity={0.88}>
     <View style={[styles.quickIconBox, { backgroundColor: bg }]}>
-      <MaterialIcons name={icon} size={26} color={color} />
+      <MaterialIcons name={icon as any} size={26} color={color} />
     </View>
     <Text style={styles.quickLabel}>{label}</Text>
   </TouchableOpacity>
@@ -278,7 +277,7 @@ const DocRow: React.FC<DocRowProps> = ({ icon, title, sub, onDownload }) => (
   <View style={styles.docRow}>
     <View style={styles.docLeft}>
       <View style={styles.docIconBox}>
-        <MaterialIcons name={icon} size={20} color={colors.primary} />
+        <MaterialIcons name={icon as any} size={20} color={colors.primary} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.docTitle} numberOfLines={1}>

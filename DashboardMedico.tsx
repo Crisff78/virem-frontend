@@ -262,7 +262,7 @@ const SidebarItem: React.FC<SideItem & { onPress?: () => void }> = ({
       activeOpacity={0.85}
     >
       <MaterialIcons
-        name={icon}
+        name={icon as any}
         size={20}
         color={active ? colors.primary : colors.viremMuted}
       />
@@ -284,7 +284,7 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, trendText, tren
     <View style={styles.statCard}>
       <View style={styles.statTopRow}>
         <Text style={styles.statTitle}>{title}</Text>
-        <MaterialIcons name={icon} size={20} color={colors.primary} />
+        <MaterialIcons name={icon as any} size={20} color={colors.primary} />
       </View>
 
       <View style={styles.statBottomRow}>

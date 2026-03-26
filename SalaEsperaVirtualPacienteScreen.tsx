@@ -24,8 +24,7 @@ import { io, Socket } from 'socket.io-client';
 import { useLanguage } from './localization/LanguageContext';
 import type { RootStackParamList } from './navigation/types';
 import { apiUrl, BACKEND_URL } from './config/backend';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { ensurePatientSessionUser, getPatientDisplayName } from './utils/patientSession';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');

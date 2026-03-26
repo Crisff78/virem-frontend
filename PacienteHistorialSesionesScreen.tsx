@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   View,
   Text,
@@ -13,12 +14,14 @@ import {
 import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 import type { RootStackParamList } from './navigation/types';
 import { useLanguage } from './localization/LanguageContext';
+import { apiUrl } from './config/backend';
 import { ensurePatientSessionUser, getPatientDisplayName } from './utils/patientSession';
+import { getAuthToken } from './utils/auth';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
@@ -55,69 +58,93 @@ const parseUser = (raw: string | null): User | null => {
   }
 };
 
+const FALLBACK_SESSIONS: SessionRow[] = [
+  {
+    id: 's-current',
+    device: Platform.OS === 'web' ? 'Navegador Web' : 'Dispositivo Movil',
+    ip: '---',
+    location: 'Sesion actual',
+    dateTime: 'Ahora',
+    current: true,
+  },
+];
+
+const mapApiSession = (item: any, index: number): SessionRow => ({
+  id: String(item?.id || item?.sessionId || `s-${index}`),
+  device: String(item?.device || item?.userAgent || 'Dispositivo desconocido'),
+  ip: String(item?.ip || item?.ipAddress || '---'),
+  location: String(item?.location || item?.ciudad || 'Ubicacion desconocida'),
+  dateTime: item?.createdAt
+    ? new Intl.DateTimeFormat('es-DO', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(item.createdAt))
+    : String(item?.dateTime || 'Sin fecha'),
+  current: Boolean(item?.current || item?.esSesionActual),
+});
+
 const PacienteHistorialSesionesScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { t, tx } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
-  const [sessions, setSessions] = useState<SessionRow[]>([
-    {
-      id: 's1',
-      device: 'MacBook Pro - Chrome',
-      ip: '192.168.1.45',
-      location: 'Santo Domingo, DO',
-      dateTime: 'Hoy, 10:24 AM',
-      current: true,
-    },
-    {
-      id: 's2',
-      device: 'iPhone 13 - App VIREM',
-      ip: '85.12.44.201',
-      location: 'Santiago, DO',
-      dateTime: 'Ayer, 08:15 PM',
-      current: false,
-    },
-    {
-      id: 's3',
-      device: 'Windows PC - Microsoft Edge',
-      ip: '74.22.10.155',
-      location: 'La Vega, DO',
-      dateTime: '12 Oct, 09:30 AM',
-      current: false,
-    },
-    {
-      id: 's4',
-      device: 'Samsung Galaxy Tab - Safari',
-      ip: '188.4.12.99',
-      location: 'San Pedro, DO',
-      dateTime: '08 Oct, 03:45 PM',
-      current: false,
-    },
-  ]);
+  const [sessions, setSessions] = useState<SessionRow[]>(FALLBACK_SESSIONS);
+  const [loadingSessions, setLoadingSessions] = useState(false);
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        if (Platform.OS === 'web') {
-          const webUser = ensurePatientSessionUser(parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY)));
-          if (webUser) {
-            setUser(webUser);
-            return;
-          }
+  const loadSessions = useCallback(async () => {
+    setLoadingSessions(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(apiUrl('/api/auth/sessions'), {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (response.ok && payload?.success && Array.isArray(payload?.sessions)) {
+        const mapped = payload.sessions.map(mapApiSession);
+        if (mapped.length > 0) {
+          setSessions(mapped);
         }
-        const secureUser = ensurePatientSessionUser(
-          parseUser(await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY))
-        );
-        if (secureUser) {
-          setUser(secureUser);
+      }
+    } catch {
+      // Keep fallback sessions
+    } finally {
+      setLoadingSessions(false);
+    }
+  }, []);
+
+  const loadUser = useCallback(async () => {
+    try {
+      if (Platform.OS === 'web') {
+        const webUser = ensurePatientSessionUser(parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY)));
+        if (webUser) {
+          setUser(webUser);
           return;
         }
-        setUser(ensurePatientSessionUser(parseUser(await AsyncStorage.getItem(STORAGE_KEY))));
-      } catch {
-        setUser(null);
       }
-    };
-    loadUser();
+      const secureUser = ensurePatientSessionUser(
+        parseUser(await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY))
+      );
+      if (secureUser) {
+        setUser(secureUser);
+        return;
+      }
+      setUser(ensurePatientSessionUser(parseUser(await AsyncStorage.getItem(STORAGE_KEY))));
+    } catch {
+      setUser(null);
+    }
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUser();
+      loadSessions();
+    }, [loadUser, loadSessions])
+  );
 
   const fullName = useMemo(() => getPatientDisplayName(user, 'Paciente'), [user]);
 
@@ -139,19 +166,37 @@ const PacienteHistorialSesionesScreen: React.FC = () => {
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
-  const closeOtherSessions = () => {
+  const closeOtherSessions = async () => {
+    try {
+      const token = await getAuthToken();
+      if (token) {
+        await fetch(apiUrl('/api/auth/sessions/revoke-others'), {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      }
+    } catch {}
     setSessions((prev) => prev.filter((s) => s.current));
     Alert.alert(
       tx({ es: 'Listo', en: 'Done', pt: 'Pronto' }),
       tx({
-        es: 'Se cerraron todas las demás sesiones.',
+        es: 'Se cerraron todas las demas sesiones.',
         en: 'All other sessions were closed.',
         pt: 'Todas as outras sessoes foram encerradas.',
       })
     );
   };
 
-  const removeSession = (id: string) => {
+  const removeSession = async (id: string) => {
+    try {
+      const token = await getAuthToken();
+      if (token) {
+        await fetch(apiUrl(`/api/auth/sessions/${id}/revoke`), {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      }
+    } catch {}
     setSessions((prev) => prev.filter((s) => s.id !== id));
   };
 

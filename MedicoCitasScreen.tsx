@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { io, Socket } from 'socket.io-client';
 import type { RootStackParamList } from './navigation/types';
 import { apiUrl, BACKEND_URL } from './config/backend';
@@ -808,7 +808,7 @@ const MedicoCitasScreen: React.FC = () => {
                 onPress={() => handleSideItemPress(item)}
               >
                 <MaterialIcons
-                  name={item.icon}
+                  name={item.icon as any}
                   size={20}
                   color={item.active ? colors.primary : colors.muted}
                 />

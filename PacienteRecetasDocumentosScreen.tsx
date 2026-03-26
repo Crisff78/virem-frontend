@@ -1,7 +1,9 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Platform,
   Share,
   ScrollView,
@@ -14,13 +16,15 @@ import {
 import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 
 import { useLanguage } from './localization/LanguageContext';
 import type { RootStackParamList } from './navigation/types';
+import { apiUrl } from './config/backend';
 import { ensurePatientSessionUser, getPatientDisplayName } from './utils/patientSession';
+import { getAuthToken } from './utils/auth';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
@@ -55,6 +59,7 @@ type DocumentItem = {
   icon: string;
   tint: string;
   bg: string;
+  url?: string | null;
 };
 
 const parseUser = (raw: string | null): User | null => {
@@ -73,36 +78,20 @@ const sanitizeFotoUrl = (value: unknown) => {
   return clean;
 };
 
-const recetas: DocumentItem[] = [
+const FALLBACK_RECETAS: DocumentItem[] = [
   {
-    title: 'Tratamiento Hipertensión',
-    doctor: 'Dr. Alejandro García',
+    title: 'Tratamiento Hipertension',
+    doctor: 'Dr. Alejandro Garcia',
     date: 'Emitido el 15 Oct, 2023',
-    icon: 'picture-as-pdf',
-    tint: '#ef4444',
-    bg: '#fef2f2',
-  },
-  {
-    title: 'Receta_Gripe_Estacional',
-    doctor: 'Dra. Marta Sánchez',
-    date: 'Emitido el 12 Oct, 2023',
-    icon: 'picture-as-pdf',
-    tint: '#ef4444',
-    bg: '#fef2f2',
-  },
-  {
-    title: 'Antibióticos_Amoxicilina',
-    doctor: 'Dr. Ricardo Ruiz',
-    date: 'Emitido el 05 Sep, 2023',
     icon: 'picture-as-pdf',
     tint: '#ef4444',
     bg: '#fef2f2',
   },
 ];
 
-const certificados: DocumentItem[] = [
+const FALLBACK_CERTIFICADOS: DocumentItem[] = [
   {
-    title: 'Certificado de Aptitud Física',
+    title: 'Certificado de Aptitud Fisica',
     doctor: 'Dr. Ricardo Ruiz',
     date: 'Emitido el 01 Ago, 2023',
     icon: 'description',
@@ -110,6 +99,30 @@ const certificados: DocumentItem[] = [
     bg: '#eef4fb',
   },
 ];
+
+const mapApiDocToItem = (doc: any, tipo: 'receta' | 'certificado'): DocumentItem => {
+  const dateRaw = doc?.fechaEmision || doc?.createdAt || '';
+  let dateLabel = '';
+  if (dateRaw) {
+    const d = new Date(dateRaw);
+    if (!Number.isNaN(d.getTime())) {
+      dateLabel = `Emitido el ${new Intl.DateTimeFormat('es-DO', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }).format(d)}`;
+    }
+  }
+  return {
+    title: String(doc?.titulo || doc?.title || 'Documento'),
+    doctor: String(doc?.medicoNombre || doc?.doctor || 'Medico'),
+    date: dateLabel || String(doc?.date || 'Sin fecha'),
+    icon: tipo === 'receta' ? 'picture-as-pdf' : 'description',
+    tint: tipo === 'receta' ? '#ef4444' : '#1A3D63',
+    bg: tipo === 'receta' ? '#fef2f2' : '#eef4fb',
+    url: doc?.archivoUrl || doc?.url || null,
+  };
+};
 
 const sanitizeFileName = (raw: string) =>
   raw
@@ -120,7 +133,20 @@ const sanitizeFileName = (raw: string) =>
 const buildDocumentContent = (item: DocumentItem) =>
   `VIREM - Documento de ejemplo\n\nTítulo: ${item.title}\nEmitido por: ${item.doctor}\nFecha: ${item.date}\n\nNota: Este archivo es una demostración de descarga para pruebas de interfaz.`;
 
-const downloadExampleDocument = (item: DocumentItem) => {
+const downloadDocument = (item: DocumentItem) => {
+  // If there's a real URL from the API, open it directly
+  if (item.url) {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.open(item.url, '_blank');
+    } else {
+      Linking.openURL(item.url).catch(() => {
+        Alert.alert('Error', 'No se pudo abrir el documento.');
+      });
+    }
+    return;
+  }
+
+  // Fallback: generate a demo text file
   if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof document !== 'undefined') {
     const blob = new Blob([buildDocumentContent(item)], {
       type: 'text/plain;charset=utf-8',
@@ -138,7 +164,7 @@ const downloadExampleDocument = (item: DocumentItem) => {
 
   Share.share({
     title: item.title,
-    message: `${buildDocumentContent(item)}\n\n(Documento de ejemplo VIREM)`,
+    message: `${buildDocumentContent(item)}\n\n(Documento VIREM)`,
   }).catch(() => {
     Alert.alert('Error', 'No se pudo compartir el documento en este dispositivo.');
   });
@@ -148,10 +174,10 @@ const DocumentRow: React.FC<{ item: DocumentItem }> = ({ item }) => (
   <TouchableOpacity
     style={styles.docCard}
     activeOpacity={0.9}
-    onPress={() => downloadExampleDocument(item)}
+    onPress={() => downloadDocument(item)}
   >
     <View style={[styles.docIconWrap, { backgroundColor: item.bg }]}>
-      <MaterialIcons name={item.icon} size={20} color={item.tint} />
+      <MaterialIcons name={item.icon as any} size={20} color={item.tint} />
     </View>
     <View style={{ flex: 1, minWidth: 0 }}>
       <Text style={styles.docTitle} numberOfLines={1}>
@@ -162,7 +188,7 @@ const DocumentRow: React.FC<{ item: DocumentItem }> = ({ item }) => (
       </Text>
       <Text style={styles.docMeta}>{item.date}</Text>
     </View>
-    <TouchableOpacity style={styles.downloadBtn} onPress={() => downloadExampleDocument(item)}>
+    <TouchableOpacity style={styles.downloadBtn} onPress={() => downloadDocument(item)}>
       <MaterialIcons name="download" size={18} color={colors.blue} />
     </TouchableOpacity>
   </TouchableOpacity>
@@ -178,7 +204,7 @@ const SectionBlock: React.FC<{
     <View style={styles.sectionHead}>
       <View style={styles.sectionHeadLeft}>
         <View style={styles.sectionIcon}>
-          <MaterialIcons name={icon} size={18} color={colors.blue} />
+          <MaterialIcons name={icon as any} size={18} color={colors.blue} />
         </View>
         <Text style={styles.sectionTitle}>{title}</Text>
       </View>
@@ -198,36 +224,94 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [user, setUser] = useState<User | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
+  const [recetas, setRecetas] = useState<DocumentItem[]>(FALLBACK_RECETAS);
+  const [certificados, setCertificados] = useState<DocumentItem[]>(FALLBACK_CERTIFICADOS);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [searchText, setSearchText] = useState('');
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        if (Platform.OS === 'web') {
-          const localStorageUser = ensurePatientSessionUser(
-            parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY))
-          );
-          if (localStorageUser) {
-            setUser(localStorageUser);
-            return;
+  const loadDocuments = useCallback(async () => {
+    setLoadingDocs(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(apiUrl('/api/documentos/me'), {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (response.ok && payload?.success && Array.isArray(payload?.documentos)) {
+        const apiRecetas: DocumentItem[] = [];
+        const apiCertificados: DocumentItem[] = [];
+
+        for (const doc of payload.documentos) {
+          const tipo = String(doc?.tipo || '').toLowerCase();
+          if (tipo.includes('certificado') || tipo.includes('constancia')) {
+            apiCertificados.push(mapApiDocToItem(doc, 'certificado'));
+          } else {
+            apiRecetas.push(mapApiDocToItem(doc, 'receta'));
           }
         }
-        const secureStoreUser = ensurePatientSessionUser(
-          parseUser(await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY))
+
+        if (apiRecetas.length > 0) setRecetas(apiRecetas);
+        if (apiCertificados.length > 0) setCertificados(apiCertificados);
+      }
+    } catch {
+      // Keep fallback data on error
+    } finally {
+      setLoadingDocs(false);
+    }
+  }, []);
+
+  const loadUser = useCallback(async () => {
+    try {
+      if (Platform.OS === 'web') {
+        const localStorageUser = ensurePatientSessionUser(
+          parseUser(localStorage.getItem(LEGACY_USER_STORAGE_KEY))
         );
-        if (secureStoreUser) {
-          setUser(secureStoreUser);
-          return;
+        if (localStorageUser) {
+          setUser(localStorageUser);
         }
+      }
+      const secureStoreUser = ensurePatientSessionUser(
+        parseUser(await SecureStore.getItemAsync(LEGACY_USER_STORAGE_KEY))
+      );
+      if (secureStoreUser) {
+        setUser(secureStoreUser);
+      } else {
         const asyncUser = ensurePatientSessionUser(parseUser(await AsyncStorage.getItem(STORAGE_KEY)));
         setUser(asyncUser);
-      } catch {
-        setUser(null);
-      } finally {
-        setLoadingUser(false);
       }
-    };
-    loadUser();
+    } catch {
+      setUser(null);
+    } finally {
+      setLoadingUser(false);
+    }
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUser();
+      loadDocuments();
+    }, [loadUser, loadDocuments])
+  );
+
+  const filteredRecetas = useMemo(() => {
+    if (!searchText.trim()) return recetas;
+    const q = searchText.toLowerCase();
+    return recetas.filter(
+      (r) => r.title.toLowerCase().includes(q) || r.doctor.toLowerCase().includes(q)
+    );
+  }, [recetas, searchText]);
+
+  const filteredCertificados = useMemo(() => {
+    if (!searchText.trim()) return certificados;
+    const q = searchText.toLowerCase();
+    return certificados.filter(
+      (c) => c.title.toLowerCase().includes(q) || c.doctor.toLowerCase().includes(q)
+    );
+  }, [certificados, searchText]);
 
   const fullName = useMemo(() => getPatientDisplayName(user, 'Paciente'), [user]);
 
@@ -343,6 +427,8 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
               placeholder="Buscar por nombre o fecha..."
               placeholderTextColor="#8aa7bf"
               style={styles.searchInput}
+              value={searchText}
+              onChangeText={setSearchText}
             />
           </View>
           <TouchableOpacity
@@ -370,12 +456,21 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
           Accede y descarga tu historial médico organizado por categorías.
         </Text>
 
-        <SectionBlock icon="description" title="Recetas Médicas" count="3 ARCHIVOS" items={recetas} />
+        {loadingDocs ? (
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 20 }} />
+        ) : null}
+
+        <SectionBlock
+          icon="description"
+          title="Recetas Medicas"
+          count={`${filteredRecetas.length} ARCHIVO${filteredRecetas.length !== 1 ? 'S' : ''}`}
+          items={filteredRecetas}
+        />
         <SectionBlock
           icon="verified"
           title="Certificados y Otros"
-          count="1 ARCHIVO"
-          items={certificados}
+          count={`${filteredCertificados.length} ARCHIVO${filteredCertificados.length !== 1 ? 'S' : ''}`}
+          items={filteredCertificados}
         />
 
         <View style={styles.noticeCard}>
