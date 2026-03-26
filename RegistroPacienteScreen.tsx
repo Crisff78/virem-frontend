@@ -7,6 +7,7 @@ import {
   Alert,
   Image,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -212,6 +213,8 @@ const styles = StyleSheet.create({
   logoSubtitle: { color: colors.blueGray, fontSize: 10, fontWeight: '500' },
   mainContent: { flex: 1, paddingVertical: 32, paddingHorizontal: 16 },
   mainContentWide: { paddingHorizontal: 24 },
+  mainContentContainer: { paddingBottom: 32 },
+  mainContentContainerMobileWeb: { paddingBottom: 120 },
   contentWrapper: { maxWidth: 960, alignSelf: 'center', width: '100%', gap: 24 },
   breadcrumbs: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
   breadcrumbLink: { color: colors.blueGray, fontSize: 14, fontWeight: '500' },
@@ -251,9 +254,11 @@ const styles = StyleSheet.create({
 
 const RegistroPacienteScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProps>();
-  const { width: viewportWidth } = useWindowDimensions();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const isWideLayout = viewportWidth > 768;
   const isTabletLayout = viewportWidth > 640;
+  const isMobileWeb = Platform.OS === 'web' && viewportWidth <= 768;
+  const mobileScrollHeight = Math.max(viewportHeight - 64, 320);
 
   const [names, setNames] = useState('');
   const [lastNames, setLastNames] = useState('');
@@ -361,7 +366,15 @@ const RegistroPacienteScreen: React.FC = () => {
       </View>
 
       <ScrollView
-        style={[styles.mainContent, isWideLayout && styles.mainContentWide]}
+        style={[
+          styles.mainContent,
+          isWideLayout && styles.mainContentWide,
+          isMobileWeb && ({ flex: 0, height: mobileScrollHeight } as any),
+        ]}
+        contentContainerStyle={[
+          styles.mainContentContainer,
+          isMobileWeb && styles.mainContentContainerMobileWeb,
+        ]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.contentWrapper}>

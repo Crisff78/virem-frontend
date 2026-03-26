@@ -415,6 +415,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   mainContentWide: { paddingHorizontal: 24 },
+  mainContentContainer: { paddingBottom: 32 },
+  mainContentContainerMobileWeb: { paddingBottom: 120 },
   contentWrapper: {
     maxWidth: 960,
     alignSelf: "center",
@@ -632,9 +634,11 @@ const styles = StyleSheet.create({
 
 const RegistroMedicoScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProps>();
-  const { width: viewportWidth } = useWindowDimensions();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const isWideLayout = viewportWidth > 768;
   const isTabletLayout = viewportWidth > 640;
+  const isMobileWeb = Platform.OS === "web" && viewportWidth <= 768;
+  const mobileScrollHeight = Math.max(viewportHeight - 64, 320);
 
   // Campos
   const [nombreCompleto, setNombreCompleto] = useState("");
@@ -879,7 +883,15 @@ const RegistroMedicoScreen: React.FC = () => {
       </View>
 
       <ScrollView
-        style={[styles.mainContent, isWideLayout && styles.mainContentWide]}
+        style={[
+          styles.mainContent,
+          isWideLayout && styles.mainContentWide,
+          isMobileWeb && ({ flex: 0, height: mobileScrollHeight } as any),
+        ]}
+        contentContainerStyle={[
+          styles.mainContentContainer,
+          isMobileWeb && styles.mainContentContainerMobileWeb,
+        ]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.contentWrapper}>
