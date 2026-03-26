@@ -14,8 +14,8 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { apiUrl } from './config/backend';
 import { RootStackParamList } from './navigation/types';
+import { requestJson } from './utils/api';
 
 type NavigationProps = NativeStackNavigationProp<
   RootStackParamList,
@@ -98,26 +98,22 @@ const EstablecerNuevaContrasenaScreen: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Peticion para actualizar la clave en Postgres
-      const response = await fetch(apiUrl('/api/auth/recovery/reset-password'), {
+      const data = await requestJson<any>('/api/auth/recovery/reset-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           email: email?.toLowerCase().trim(),
           newPassword: newPassword,
-        }),
+        },
       });
 
-      const data = await response.json().catch(() => null);
-
-      if (response.ok && data?.success) {
+      if (data?.success) {
         Alert.alert('Exito', 'Contrasena actualizada. Ya puedes iniciar sesion.');
         navigation.navigate('Login');
       } else {
         Alert.alert('Error', data?.message || 'No se pudo actualizar.');
       }
-    } catch (error) {
-      Alert.alert('Error', 'No hay conexion con el servidor.');
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'No hay conexion con el servidor.');
     } finally {
       setIsLoading(false);
     }

@@ -3,18 +3,18 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { createRef, useRef, useState } from 'react';
 import { Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator, useWindowDimensions } from 'react-native';
-import { apiUrl } from './config/backend';
 import { RootStackParamList } from './navigation/types';
+import { requestJson } from './utils/api';
 
 type VerificarIdentidadRouteProp = RouteProp<RootStackParamList, 'VerificarIdentidad'>;
 type NavigationProps = NativeStackNavigationProp<RootStackParamList, 'VerificarIdentidad'>;
 
 const colors = {
-    primary: '#4A7FA7', 
-    backgroundLight: '#F6FAFD', 
-    textPrimaryLight: '#0A1931', 
-    textSecondaryLight: '#1A3D63', 
-    borderLight: '#B3CFE5', 
+    primary: '#4A7FA7',
+    backgroundLight: '#F6FAFD',
+    textPrimaryLight: '#0A1931',
+    textSecondaryLight: '#1A3D63',
+    borderLight: '#B3CFE5',
     cardLight: '#FFFFFF',
 };
 
@@ -41,8 +41,8 @@ const VerificarIdentidadScreen: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [resendLoading, setResendLoading] = useState(false);
     const { width } = useWindowDimensions();
-    
-    const recipient = route.params?.email || 'tu correo electronico'; 
+
+    const recipient = route.params?.email || 'tu correo electronico';
     const OTP_LENGTH = 6;
     const [otp, setOtp] = useState<string[]>(new Array(OTP_LENGTH).fill(''));
     const inputRefs = useRef<Array<React.RefObject<TextInput | null>>>([]);
@@ -50,7 +50,7 @@ const VerificarIdentidadScreen: React.FC = () => {
     const otpBoxSize = width < 390 ? 40 : 45;
 
     if (inputRefs.current.length === 0) {
-        inputRefs.current = Array(OTP_LENGTH).fill(0).map(() => createRef<TextInput | null>()); 
+        inputRefs.current = Array(OTP_LENGTH).fill(0).map(() => createRef<TextInput | null>());
     }
 
     const handleOtpChange = (text: string, index: number) => {
@@ -88,7 +88,7 @@ const VerificarIdentidadScreen: React.FC = () => {
             Keyboard.dismiss();
         }
     };
-    
+
     const handleKeyPress = (e: any, index: number) => {
         if (e.nativeEvent.key === 'Backspace' && otp[index] === '' && index > 0) {
             inputRefs.current[index - 1].current?.focus();
@@ -104,20 +104,18 @@ const VerificarIdentidadScreen: React.FC = () => {
 
         setIsLoading(true);
         try {
-            const response = await fetch(apiUrl('/api/auth/recovery/verify-code'), {
+            const data = await requestJson<any>('/api/auth/recovery/verify-code', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: recipient, codigo: code }),
+                body: { email: recipient, codigo: code },
             });
-            const data = await response.json().catch(() => null);
 
-            if (response.ok && data?.success) {
-                navigation.navigate('EstablecerNuevaContrasena', { email: recipient }); 
+            if (data?.success) {
+                navigation.navigate('EstablecerNuevaContrasena', { email: recipient });
             } else {
                 Alert.alert("Error", data?.message || "Codigo incorrecto o expirado.");
             }
         } catch (error) {
-            Alert.alert("Error", "Sin conexion al servidor.");
+            Alert.alert("Error", (error as any)?.message || "Sin conexion al servidor.");
         } finally {
             setIsLoading(false);
         }
@@ -131,19 +129,17 @@ const VerificarIdentidadScreen: React.FC = () => {
 
         setResendLoading(true);
         try {
-            const response = await fetch(apiUrl('/api/auth/recovery/send-code'), {
+            const data = await requestJson<any>('/api/auth/recovery/send-code', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: recipient }),
+                body: { email: recipient },
             });
-            const data = await response.json().catch(() => null);
-            if (response.ok && data?.success) {
+            if (data?.success) {
                 Alert.alert('Codigo reenviado', 'Revisa tu correo para el nuevo codigo.');
             } else {
                 Alert.alert('Error', data?.message || 'No se pudo reenviar el codigo.');
             }
-        } catch {
-            Alert.alert('Error', 'Sin conexion al servidor.');
+        } catch (error) {
+            Alert.alert('Error', (error as any)?.message || 'Sin conexion al servidor.');
         } finally {
             setResendLoading(false);
         }

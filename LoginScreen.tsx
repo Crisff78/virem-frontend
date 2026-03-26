@@ -14,12 +14,13 @@ import {
 
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 import { RootStackParamList } from './navigation/types';
 import { apiUrl, BACKEND_URL } from './config/backend';
 import { isValidEmail } from './utils/validation';
+import { requestJson } from './utils/api';
+import { saveSession } from './utils/session';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -38,41 +39,6 @@ const COLORS = {
   link: '#1F4770',
   iconColor: '#888888',
 };
-
-async function saveSession(token?: string, userProfile?: any) {
-  // Web: usar localStorage (SecureStore suele fallar en web)
-  if (Platform.OS === 'web') {
-    try {
-      if (token) {
-        localStorage.setItem('authToken', token);
-        localStorage.setItem('token', token);
-      }
-      if (userProfile) {
-        localStorage.setItem('userProfile', JSON.stringify(userProfile));
-        localStorage.setItem('user', JSON.stringify(userProfile));
-      }
-    } catch (e) {
-      console.log('localStorage fallo:', e);
-    }
-    return;
-  }
-
-  // Mobile: SecureStore
-  try {
-    if (token) {
-      await SecureStore.setItemAsync('authToken', token);
-      await SecureStore.setItemAsync('token', token);
-      await AsyncStorage.setItem('token', token);
-    }
-    if (userProfile) {
-      const rawProfile = JSON.stringify(userProfile);
-      await SecureStore.setItemAsync('userProfile', rawProfile);
-      await AsyncStorage.setItem('user', rawProfile);
-    }
-  } catch (e) {
-    console.log('SecureStore fallo:', e);
-  }
-}
 
 async function getCachedMedicoProfileByEmail(email: string) {
   const key = String(email || '').trim().toLowerCase();
@@ -134,28 +100,10 @@ const LoginScreen: React.FC = () => {
     console.log('Email:', emailTrim);
 
     try {
-      const response = await fetch(url, {
+      const data = await requestJson<any>('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailTrim, password }),
+        body: { email: emailTrim, password },
       });
-
-      // Leer texto primero evita crashes de json
-      const raw = await response.text();
-      console.log('HTTP:', response.status);
-      console.log('RAW:', raw);
-
-      let data: any = null;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        data = null;
-      }
-
-      if (!response.ok || !data?.success) {
-        Alert.alert('Error', data?.message || `Login fallo (HTTP ${response.status}).`);
-        return;
-      }
 
       const token = data?.token ?? data?.data?.token ?? '';
       const userProfile = data?.user ?? data?.data?.user ?? null;
@@ -165,15 +113,15 @@ const LoginScreen: React.FC = () => {
       const mergedProfile =
         shouldMergeMedicoCache && cachedMedico && userProfile
           ? {
-              ...userProfile,
-              nombreCompleto: userProfile?.nombreCompleto || cachedMedico?.nombreCompleto,
-              especialidad: userProfile?.especialidad || cachedMedico?.especialidad,
-              fotoUrl: userProfile?.fotoUrl || cachedMedico?.fotoUrl,
-              cedula: userProfile?.cedula || cachedMedico?.cedula,
-              telefono: userProfile?.telefono || cachedMedico?.telefono,
-              genero: userProfile?.genero || cachedMedico?.genero,
-              fechanacimiento: userProfile?.fechanacimiento || cachedMedico?.fechanacimiento,
-            }
+            ...userProfile,
+            nombreCompleto: userProfile?.nombreCompleto || cachedMedico?.nombreCompleto,
+            especialidad: userProfile?.especialidad || cachedMedico?.especialidad,
+            fotoUrl: userProfile?.fotoUrl || cachedMedico?.fotoUrl,
+            cedula: userProfile?.cedula || cachedMedico?.cedula,
+            telefono: userProfile?.telefono || cachedMedico?.telefono,
+            genero: userProfile?.genero || cachedMedico?.genero,
+            fechanacimiento: userProfile?.fechanacimiento || cachedMedico?.fechanacimiento,
+          }
           : userProfile;
 
       // Guardar sesion sin bloquear navegacion
@@ -195,7 +143,9 @@ const LoginScreen: React.FC = () => {
       console.log('ERROR LOGIN:', err?.message || err);
       Alert.alert(
         'Error de red',
-        `No se pudo conectar al backend.\n\nBackend actual: ${BACKEND_URL}`
+        err?.message
+          ? `No se pudo iniciar sesion: ${err.message}`
+          : `No se pudo conectar al backend.\n\nBackend actual: ${BACKEND_URL}`
       );
     } finally {
       setIsLoading(false);

@@ -13,8 +13,8 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { apiUrl } from './config/backend';
 import { RootStackParamList } from './navigation/types';
+import { requestJson } from './utils/api';
 import { isValidEmail } from './utils/validation';
 
 type NavigationProps = NativeStackNavigationProp<
@@ -173,25 +173,20 @@ const RecuperarContrasenaScreen: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(apiUrl('/api/auth/recovery/send-code'), {
+      const data = await requestJson<any>('/api/auth/recovery/send-code', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({ email: cleanedEmail }),
+        body: { email: cleanedEmail },
       });
 
-      const data = await response.json().catch(() => null);
-
-      if (response.ok && data?.success) {
+      if (data?.success) {
         navigation.navigate('VerificarIdentidad', { email: cleanedEmail });
       } else {
         Alert.alert('Error', data?.message || 'No se pudo enviar el codigo de recuperacion.');
       }
-    } catch (error) {
+    } catch (error: any) {
       Alert.alert(
         'Error de Conexion',
+        error?.message ||
         'No se pudo contactar al servidor. Revisa si el backend esta encendido y la URL configurada.'
       );
     } finally {
