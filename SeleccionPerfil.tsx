@@ -89,7 +89,7 @@ const SeleccionPerfil: React.FC = () => {
     );
   }
 
-  return <View style={styles.mainContainer}>{content}</View>;
+  return <View style={[styles.mainContainer, styles.mainContainerCentered]}>{content}</View>;
 };
 
 const styles = StyleSheet.create({
@@ -97,9 +97,11 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     backgroundColor: colors.pageBg,
+    padding: 16,
+  },
+  mainContainerCentered: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
   },
   mainContainerMobileContent: {
     flexGrow: 1,

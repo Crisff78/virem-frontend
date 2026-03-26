@@ -167,10 +167,10 @@ const validarTelefonoBackend = async (
   phoneFormatted: string
 ): Promise<ValidacionTelefonoBackendResult> => {
   try {
-    let res = await postValidarTelefono('/api/phone/validar-telefono', countryCode, phoneFormatted);
+    let res = await postValidarTelefono('/api/validar-telefono', countryCode, phoneFormatted);
 
     if (res.status === 404) {
-      res = await postValidarTelefono('/api/validar-telefono', countryCode, phoneFormatted);
+      res = await postValidarTelefono('/api/phone/validar-telefono', countryCode, phoneFormatted);
     }
 
     const data = await res.json().catch(() => null);
