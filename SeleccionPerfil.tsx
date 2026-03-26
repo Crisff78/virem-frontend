@@ -1,23 +1,14 @@
 ﻿import React from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from './navigation/types';
 
 type NavigationProps = NativeStackNavigationProp<RootStackParamList, 'SeleccionPerfil'>;
 
 const colors = {
-  primary: '#137fec',
   blueDeep: '#0A1931',
   blueDark: '#1A3D63',
   blueMedium: '#4A7FA7',
@@ -28,9 +19,6 @@ const colors = {
 
 const SeleccionPerfil: React.FC = () => {
   const navigation = useNavigation<NavigationProps>();
-  const { width } = useWindowDimensions();
-  const isWideLayout = width >= 860;
-  const isCompactPhone = width < 390;
 
   const handleRegister = (profile: 'Medico' | 'Paciente') => {
     navigation.navigate(profile === 'Paciente' ? 'RegistroPaciente' : 'RegistroMedico');
@@ -41,164 +29,125 @@ const SeleccionPerfil: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.mainContainer,
-          isWideLayout ? styles.mainContainerWide : styles.mainContainerMobile,
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.contentWrapper}>
-          <Text style={[styles.title, isCompactPhone && styles.titleCompact]}>
-            Elige cómo quieres registrarte
-          </Text>
-          <Text style={styles.subtitle}>
-            Selecciona tu perfil para acceder a las herramientas y funciones diseñadas
-            específicamente para ti.
-          </Text>
+    <View style={styles.mainContainer}>
+      <View style={styles.contentWrapper}>
+        <Text style={styles.title}>Elige cómo quieres registrarte</Text>
+        <Text style={styles.subtitle}>
+          Selecciona tu perfil para acceder a las herramientas y funciones diseñadas específicamente para ti.
+        </Text>
 
-          <View style={[styles.cardsGrid, isWideLayout ? styles.cardsGridRow : styles.cardsGridColumn]}>
-            <View style={[styles.card, isWideLayout ? styles.cardRow : styles.cardColumn]}>
-              <View style={styles.iconWrapper}>
-                <MaterialCommunityIcons name="stethoscope" size={44} color={colors.blueDark} />
-              </View>
-              <Text style={styles.cardTitle}>Médico</Text>
-              <TouchableOpacity
-                style={[styles.registerButton, styles.buttonMedico]}
-                onPress={() => handleRegister('Medico')}
-                activeOpacity={0.9}
-              >
-                <Text style={styles.buttonText}>Registrarme</Text>
-              </TouchableOpacity>
+        <View style={styles.cardsGrid}>
+          <View style={styles.card}>
+            <View style={styles.iconWrapper}>
+              <MaterialCommunityIcons name="stethoscope" size={50} color={colors.blueDark} />
             </View>
-
-            <View style={[styles.card, isWideLayout ? styles.cardRow : styles.cardColumn]}>
-              <View style={styles.iconWrapper}>
-                <MaterialCommunityIcons name="account" size={44} color={colors.blueDark} />
-              </View>
-              <Text style={styles.cardTitle}>Paciente</Text>
-              <TouchableOpacity
-                style={[styles.registerButton, styles.buttonPaciente]}
-                onPress={() => handleRegister('Paciente')}
-                activeOpacity={0.9}
-              >
-                <Text style={styles.buttonText}>Registrarme</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.cardTitle}>Médico</Text>
+            <TouchableOpacity
+              style={[styles.registerButton, styles.buttonMedico]}
+              onPress={() => handleRegister('Medico')}
+            >
+              <Text style={styles.buttonText}>Registrarme</Text>
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.footerWrapper}>
-            <Text style={styles.footerText}>
-              ¿Ya tienes una cuenta?{' '}
-              <Text style={styles.footerLink} onPress={handleLogin}>
-                Inicia sesión aquí.
-              </Text>
-            </Text>
+          <View style={styles.card}>
+            <View style={styles.iconWrapper}>
+              <MaterialCommunityIcons name="account" size={50} color={colors.blueDark} />
+            </View>
+            <Text style={styles.cardTitle}>Paciente</Text>
+            <TouchableOpacity
+              style={[styles.registerButton, styles.buttonPaciente]}
+              onPress={() => handleRegister('Paciente')}
+            >
+              <Text style={styles.buttonText}>Registrarme</Text>
+            </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+
+        <View style={styles.footerWrapper}>
+          <Text style={styles.footerText}>
+            ¿Ya tienes una cuenta?{' '}
+            <Text style={styles.footerLink} onPress={handleLogin}>
+              Inicia sesión aquí.
+            </Text>
+          </Text>
+        </View>
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.pageBg,
-  },
   mainContainer: {
-    flexGrow: 1,
+    flex: 1,
     width: '100%',
+    backgroundColor: colors.pageBg,
     alignItems: 'center',
-    paddingHorizontal: 16,
-  },
-  mainContainerMobile: {
     justifyContent: 'center',
-    paddingTop: 28,
-    paddingBottom: 24,
-  },
-  mainContainerWide: {
-    justifyContent: 'center',
-    paddingTop: 36,
-    paddingBottom: 32,
+    padding: 16,
   },
   contentWrapper: {
     width: '100%',
-    maxWidth: 960,
+    maxWidth: 768,
     alignItems: 'center',
   },
   title: {
     color: colors.blueDeep,
-    fontSize: 52,
-    fontWeight: '800',
+    fontSize: 32,
+    fontWeight: 'bold',
+    paddingTop: 24,
+    paddingBottom: 16,
     textAlign: 'center',
-    lineHeight: 58,
-    marginBottom: 16,
-  },
-  titleCompact: {
-    fontSize: 48,
-    lineHeight: 52,
   },
   subtitle: {
     color: colors.blueMedium,
     fontSize: 16,
-    maxWidth: 620,
+    maxWidth: 430,
     textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 24,
+    marginBottom: 42,
+    lineHeight: 23,
   },
   cardsGrid: {
     width: '100%',
-    gap: 20,
-  },
-  cardsGridColumn: {
-    flexDirection: 'column',
-  },
-  cardsGridRow: {
-    flexDirection: 'row',
+    flexDirection: Dimensions.get('window').width > 600 ? 'row' : 'column',
     justifyContent: 'center',
+    gap: 28,
+    paddingHorizontal: 16,
   },
   card: {
+    flex: 1,
     backgroundColor: colors.white,
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.blueLight,
-    paddingVertical: 26,
-    paddingHorizontal: 24,
+    padding: 32,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.1,
     shadowRadius: 6,
-    elevation: 3,
-  },
-  cardColumn: {
-    width: '100%',
-  },
-  cardRow: {
-    width: '48%',
-    maxWidth: 430,
+    elevation: 5,
   },
   iconWrapper: {
-    height: 78,
-    width: 78,
+    height: 80,
+    width: 80,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 39,
+    borderRadius: 40,
     backgroundColor: 'rgba(179, 207, 229, 0.3)',
-    marginBottom: 14,
+    marginBottom: 24,
   },
   cardTitle: {
     color: colors.blueDeep,
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 16,
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 16,
   },
   registerButton: {
-    minWidth: 190,
+    marginTop: 24,
+    minWidth: 180,
     height: 48,
-    borderRadius: 10,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
@@ -211,21 +160,20 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: colors.white,
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   footerWrapper: {
-    marginTop: 22,
-    marginBottom: 8,
+    marginTop: 48,
   },
   footerText: {
     color: colors.blueMedium,
-    fontSize: 15,
+    fontSize: 14,
     textAlign: 'center',
   },
   footerLink: {
     color: colors.blueDark,
-    fontWeight: '700',
+    fontWeight: 'bold',
     textDecorationLine: 'underline',
   },
 });
