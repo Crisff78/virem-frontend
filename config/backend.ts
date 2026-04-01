@@ -1,8 +1,8 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-const WEB_DEFAULT_BACKEND_URL = 'http://localhost:3000';
-const MOBILE_FALLBACK_BACKEND_URL = 'https://virem-backend.onrender.com';
+const WEB_LOCAL_BACKEND_URL = 'http://localhost:3000';
+const PUBLIC_FALLBACK_BACKEND_URL = 'https://virem-backend.onrender.com';
 
 type ExpoConstantsHostShape = {
   expoConfig?: { hostUri?: string | null };
@@ -14,7 +14,7 @@ const extractHostFromUri = (hostUri?: string | null): string | null => {
   if (!hostUri) return null;
 
   const [host] = hostUri.split(':');
-  if (!host || host === 'localhost' || host === '127.0.0.1') return null;
+  if (!host || host === 'localhost' || host === '127.0.0.1' || host === '::1') return null;
   return host;
 };
 
@@ -30,14 +30,43 @@ const resolveNativeDevBackendUrl = (): string | null => {
   return `http://${host}:3000`;
 };
 
-const resolveDefaultBackendUrl = (): string => {
-  if (Platform.OS === 'web') return WEB_DEFAULT_BACKEND_URL;
-  return resolveNativeDevBackendUrl() || MOBILE_FALLBACK_BACKEND_URL;
+const isLocalWebHost = (): boolean => {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  const host = String(window.location.hostname || '').toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
 };
 
+const isLoopbackUrl = (value: string): boolean => {
+  try {
+    const { hostname } = new URL(value);
+    const host = String(hostname || '').toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+};
+
+const resolveDefaultBackendUrl = (): string => {
+  if (Platform.OS === 'web') {
+    return isLocalWebHost() ? WEB_LOCAL_BACKEND_URL : PUBLIC_FALLBACK_BACKEND_URL;
+  }
+  return resolveNativeDevBackendUrl() || PUBLIC_FALLBACK_BACKEND_URL;
+};
+
+const normalizeEnvUrl = (value: string): string =>
+  value.trim().replace(/^['"]+/, '').replace(/['"]+$/, '');
+
+const compileTimeEnvBackendUrl = String(
+  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BACKEND_URL) || ''
+);
 const runtimeProcess = (globalThis as { process?: { env?: Record<string, string | undefined> } })
   .process;
-const envBackendUrl = String(runtimeProcess?.env?.EXPO_PUBLIC_BACKEND_URL || '').trim();
+const runtimeEnvBackendUrl = String(runtimeProcess?.env?.EXPO_PUBLIC_BACKEND_URL || '');
+const rawEnvBackendUrl = normalizeEnvUrl(compileTimeEnvBackendUrl || runtimeEnvBackendUrl);
+const envBackendUrl =
+  Platform.OS === 'web' && !isLocalWebHost() && isLoopbackUrl(rawEnvBackendUrl)
+    ? ''
+    : rawEnvBackendUrl;
 
 export const BACKEND_URL = envBackendUrl || resolveDefaultBackendUrl();
 
