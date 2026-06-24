@@ -19,6 +19,18 @@ import {
 import { useResponsive } from './hooks/useResponsive';
 import { RootStackParamList } from './navigation/types';
 import { apiUrl } from './config/backend';
+import BackToLandingButton from './components/BackToLandingButton';
+
+// Alert.alert no se muestra en web (React Native Web): usamos window.alert ahí
+// para que los mensajes sean siempre visibles.
+function showAlert(title: string, message: string) {
+  if (Platform.OS === 'web') {
+    // @ts-ignore
+    window.alert(`${title}\n\n${message}`);
+  } else {
+    Alert.alert(title, message);
+  }
+}
 
 // Tipado navegación
 type NavigationProps = NativeStackNavigationProp<RootStackParamList, 'RegistroPaciente'>;
@@ -209,6 +221,8 @@ const styles = StyleSheet.create({
   headerContent: { maxWidth: 1200, width: '100%', alignSelf: 'center', paddingHorizontal: 16, height: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerContentWide: { paddingHorizontal: 24 },
   logoGroup: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerLeftGroup: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
+  headerBackBtn: { backgroundColor: 'transparent', paddingHorizontal: 4 },
   logoImage: { width: 40, height: 40, resizeMode: 'contain' },
   logoText: { color: colors.navyDark, fontSize: 18, fontWeight: 'bold', lineHeight: 20 },
   logoSubtitle: { color: colors.blueGray, fontSize: 10, fontWeight: '500' },
@@ -292,19 +306,19 @@ const RegistroPacienteScreen: React.FC = () => {
     setTelefonoError('');
 
     if (!isFormComplete) {
-      Alert.alert('Acción Requerida', 'Debe completar los campos obligatorios (Nombres, Apellidos, Género, Teléfono y Fecha de Nacimiento).');
+      showAlert('Acción Requerida', 'Debe completar los campos obligatorios (Nombres, Apellidos, Género, Teléfono y Fecha de Nacimiento).');
       return;
     }
 
     if (!esFechaValida(birthDate)) {
       setFechaError(true);
-      Alert.alert('Fecha Inválida', 'La fecha de nacimiento no es real o es incorrecta.');
+      showAlert('Fecha Inválida', 'La fecha de nacimiento no es real o es incorrecta.');
       return;
     }
 
     if (!esMayorDe18(birthDate)) {
       setFechaMayor18Error(true);
-      Alert.alert('Edad no permitida', 'El paciente debe ser mayor de 18 años.');
+      showAlert('Edad no permitida', 'El paciente debe ser mayor de 18 años.');
       return;
     }
 
@@ -316,7 +330,7 @@ const RegistroPacienteScreen: React.FC = () => {
 
       if (!ok) {
         setCedulaError(true);
-        Alert.alert('Cédula Inválida', 'El número de cédula no es válido.');
+        showAlert('Cédula Inválida', 'El número de cédula no es válido.');
         return;
       }
     }
@@ -328,7 +342,7 @@ const RegistroPacienteScreen: React.FC = () => {
     // ✅ FIX TS: narrowing correcto
     if (tel.ok === false) {
       setTelefonoError(tel.reason);
-      Alert.alert('Teléfono inválido', tel.reason);
+      showAlert('Teléfono inválido', tel.reason);
       return;
     }
 
@@ -353,12 +367,20 @@ const RegistroPacienteScreen: React.FC = () => {
     <View style={styles.mainWrapper}>
       <View style={styles.header}>
         <View style={[styles.headerContent, isWideLayout && styles.headerContentWide]}>
-          <View style={styles.logoGroup}>
-            <Image source={ViremLogo} style={styles.logoImage} />
-            <View>
-              <Text style={styles.logoText}>VIREM</Text>
-              <Text style={styles.logoSubtitle}>Gestión Médica</Text>
-            </View>
+          <View style={styles.headerLeftGroup}>
+            <BackToLandingButton label="Volver" color={colors.navyDark} style={styles.headerBackBtn} />
+            <TouchableOpacity
+              style={styles.logoGroup}
+              onPress={() => navigation.navigate('Landing')}
+              accessibilityRole="button"
+              accessibilityLabel="Ir al inicio"
+            >
+              <Image source={ViremLogo} style={styles.logoImage} />
+              <View>
+                <Text style={styles.logoText}>VIREM</Text>
+                <Text style={styles.logoSubtitle}>Gestión Médica</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
       </View>

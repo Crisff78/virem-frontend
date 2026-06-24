@@ -6,6 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { RootStackParamList } from './navigation/types';
+import BackToLandingButton from './components/BackToLandingButton';
 
 type NavigationProps = NativeStackNavigationProp<RootStackParamList, 'SeleccionPerfil'>;
 
@@ -217,13 +218,19 @@ const SeleccionPerfil: React.FC = () => {
   );
 
   return (
-    <ScrollView 
-      style={styles.mainContainer} 
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {content}
-    </ScrollView>
+    <View style={{ flex: 1, backgroundColor: colors.pageBg }}>
+      <BackToLandingButton
+        color={colors.blueDeep}
+        style={{ position: 'absolute', top: 16, left: 16, zIndex: 10 }}
+      />
+      <ScrollView
+        style={styles.mainContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {content}
+      </ScrollView>
+    </View>
   );
 };
 

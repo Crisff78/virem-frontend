@@ -2,9 +2,10 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React from "react";
-import { Image, Platform, ScrollView, Text, View } from "react-native";
+import { Image, Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useResponsive } from "./hooks/useResponsive";
 
+import BackToLandingButton from "./components/BackToLandingButton";
 import { RegistroMedicoFormCard } from "./components/registro-medico/RegistroMedicoFormCard";
 import { RegistroMedicoSelectionModals } from "./components/registro-medico/RegistroMedicoSelectionModals";
 import { colors, styles } from "./components/registro-medico/styles";
@@ -27,12 +28,20 @@ const RegistroMedicoScreen: React.FC = () => {
     <View style={styles.mainWrapper}>
       <View style={styles.header}>
         <View style={[styles.headerContent, isWideLayout && styles.headerContentWide]}>
-          <View style={styles.logoGroup}>
-            <Image source={ViremLogo} style={styles.logoImage} />
-            <View>
-              <Text style={styles.logoText}>VIREM</Text>
-              <Text style={styles.logoSubtitle}>Gestión Médica</Text>
-            </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 }}>
+            <BackToLandingButton label="Volver" color={colors.navyDark} style={{ backgroundColor: 'transparent', paddingHorizontal: 4 }} />
+            <TouchableOpacity
+              style={styles.logoGroup}
+              onPress={() => navigation.navigate('Landing')}
+              accessibilityRole="button"
+              accessibilityLabel="Ir al inicio"
+            >
+              <Image source={ViremLogo} style={styles.logoImage} />
+              <View>
+                <Text style={styles.logoText}>VIREM</Text>
+                <Text style={styles.logoSubtitle}>Gestión Médica</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
