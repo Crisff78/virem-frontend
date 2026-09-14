@@ -1,3 +1,4 @@
+import { apiClient } from './utils/api';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -168,7 +169,7 @@ const postValidarTelefono = async (
   phoneFormatted: string
 ) => {
   const digits = phoneFormatted.replace(/\D/g, '');
-  return fetch(apiUrl(endpoint), {
+  return apiClient.fetch(apiUrl(endpoint), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ countryCode, phone: digits }),

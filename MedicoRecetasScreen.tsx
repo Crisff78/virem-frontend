@@ -8,6 +8,15 @@ import { useMedicoPortalSession } from './hooks/useMedicoPortalSession';
 import MedicoHeader from './components/MedicoHeader';
 import { apiClient } from './utils/api';
 
+function escapeHTML(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const colors = {
   primary: '#137fec',
   bg: '#F6FAFD',
@@ -248,10 +257,10 @@ const MedicoRecetasScreen: React.FC = () => {
     const meds = Array.isArray(r.medicamentos_json) ? r.medicamentos_json : [];
     const medsHTML = meds.map((m: any) => `
       <tr>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${m.nombre}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${m.dosis}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${m.frecuencia}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${m.duracion}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHTML(m.nombre)}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHTML(m.dosis)}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHTML(m.frecuencia)}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHTML(m.duracion)}</td>
       </tr>
     `).join('');
 
@@ -279,16 +288,16 @@ const MedicoRecetasScreen: React.FC = () => {
           </div>
           <div style="text-align: right;">
             <div style="font-weight: bold;">RECETA MÉDICA</div>
-            <div style="font-size: 12px; color: #666;">Folio: ${r.recetaid.split('-')[0].toUpperCase()}</div>
+            <div style="font-size: 12px; color: #666;">Folio: ${escapeHTML(r.recetaid.split('-')[0].toUpperCase())}</div>
           </div>
         </div>
 
-        <div class="info-row"><span class="label">Paciente:</span> <span>${r.paciente_nombre}</span></div>
-        <div class="info-row"><span class="label">Médico:</span> <span>${doctorName}</span></div>
-        <div class="info-row"><span class="label">Fecha:</span> <span>${new Date(r.created_at).toLocaleDateString()}</span></div>
+        <div class="info-row"><span class="label">Paciente:</span> <span>${escapeHTML(r.paciente_nombre)}</span></div>
+        <div class="info-row"><span class="label">Médico:</span> <span>${escapeHTML(doctorName)}</span></div>
+        <div class="info-row"><span class="label">Fecha:</span> <span>${escapeHTML(new Date(r.created_at).toLocaleDateString())}</span></div>
 
         <div class="section-title">DIAGNÓSTICO / EVALUACIÓN</div>
-        <div style="padding: 15px;">${r.diagnostico}</div>
+        <div style="padding: 15px;">${escapeHTML(r.diagnostico)}</div>
 
         <div class="section-title">TRATAMIENTO Y MEDICAMENTOS</div>
         <table>
@@ -307,18 +316,18 @@ const MedicoRecetasScreen: React.FC = () => {
 
         ${r.instrucciones ? `
           <div class="section-title">INSTRUCCIONES ADICIONALES</div>
-          <div style="padding: 15px;">${r.instrucciones}</div>
+          <div style="padding: 15px;">${escapeHTML(r.instrucciones)}</div>
         ` : ''}
 
         <div style="margin-top: 60px; display: flex; justify-content: flex-end;">
           <div style="text-align: center; width: 250px; border-top: 1px solid #333; padding-top: 10px;">
-            <div style="font-weight: bold;">${doctorName}</div>
+            <div style="font-weight: bold;">${escapeHTML(doctorName)}</div>
             <div style="font-size: 12px; color: #666;">Firma Digital Autorizada</div>
           </div>
         </div>
 
         <div class="footer">
-          Documento digital VIREM - Validado por ${doctorSpec}
+          Documento digital VIREM - Validado por ${escapeHTML(doctorSpec)}
         </div>
         
         <script>

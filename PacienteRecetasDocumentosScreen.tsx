@@ -30,6 +30,15 @@ const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
 const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
 
+function escapeHTML(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const colors = {
   primary: '#137fec',
   bg: '#F6FAFD',
@@ -126,10 +135,10 @@ const sanitizeFileName = (raw: string) =>
 const buildDocumentHTML = (item: DocumentItem) => {
   const medsHTML = (item.medicamentos || []).map((m, i) => `
     <tr>
-      <td style="padding: 8px; border-bottom: 1px solid #eee;">${m.nombre}</td>
-      <td style="padding: 8px; border-bottom: 1px solid #eee;">${m.dosis}</td>
-      <td style="padding: 8px; border-bottom: 1px solid #eee;">${m.frecuencia}</td>
-      <td style="padding: 8px; border-bottom: 1px solid #eee;">${m.duracion}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHTML(m.nombre)}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHTML(m.dosis)}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHTML(m.frecuencia)}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHTML(m.duracion)}</td>
     </tr>
   `).join('');
 
@@ -157,16 +166,16 @@ const buildDocumentHTML = (item: DocumentItem) => {
         </div>
         <div style="text-align: right;">
           <div style="font-weight: bold;">RECETA MÉDICA</div>
-          <div style="font-size: 12px; color: #666;">Folio: ${Math.floor(Math.random() * 1000000)}</div>
+          <div style="font-size: 12px; color: #666;">Folio: ${escapeHTML(Math.floor(Math.random() * 1000000))}</div>
         </div>
       </div>
 
-      <div class="info-row"><span class="label">Paciente:</span> <span>${item.title.includes('Receta') ? 'Paciente Registrado' : item.title}</span></div>
-      <div class="info-row"><span class="label">Médico:</span> <span>${item.doctor}</span></div>
-      <div class="info-row"><span class="label">Fecha:</span> <span>${item.date}</span></div>
+      <div class="info-row"><span class="label">Paciente:</span> <span>${escapeHTML(item.title.includes('Receta') ? 'Paciente Registrado' : item.title)}</span></div>
+      <div class="info-row"><span class="label">Médico:</span> <span>${escapeHTML(item.doctor)}</span></div>
+      <div class="info-row"><span class="label">Fecha:</span> <span>${escapeHTML(item.date)}</span></div>
 
       <div class="section-title">DIAGNÓSTICO / EVALUACIÓN</div>
-      <div style="padding: 15px;">${item.diagnostico || 'Consulta general de seguimiento.'}</div>
+      <div style="padding: 15px;">${escapeHTML(item.diagnostico || 'Consulta general de seguimiento.')}</div>
 
       <div class="section-title">TRATAMIENTO Y MEDICAMENTOS</div>
       <table>
@@ -185,12 +194,12 @@ const buildDocumentHTML = (item: DocumentItem) => {
 
       ${item.instrucciones ? `
         <div class="section-title">INSTRUCCIONES ADICIONALES</div>
-        <div style="padding: 15px;">${item.instrucciones}</div>
+        <div style="padding: 15px;">${escapeHTML(item.instrucciones)}</div>
       ` : ''}
 
       <div style="margin-top: 60px; display: flex; justify-content: flex-end;">
         <div style="text-align: center; width: 250px; border-top: 1px solid #333; padding-top: 10px;">
-          <div style="font-weight: bold;">${item.doctor}</div>
+          <div style="font-weight: bold;">${escapeHTML(item.doctor)}</div>
           <div style="font-size: 12px; color: #666;">Firma Digital Autorizada</div>
         </div>
       </div>

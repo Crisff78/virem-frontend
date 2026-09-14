@@ -162,7 +162,7 @@ const RegistroCredencialesMedicoScreen: React.FC = () => {
       await clearMedicoDraft(dm.draftKey);
 
       if (res?.requiresEmailVerification) {
-        navigation.replace('VerificarEmail', { email: emailTrim, roleId: 2 });
+        navigation.replace('VerificarEmail', { email: emailTrim, roleId: 2, pendingRegistration: true });
       } else if (res?.requiresAdminApproval) {
         showAlert(
           'Registro enviado',

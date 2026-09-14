@@ -48,7 +48,7 @@ export type RootStackParamList = {
 
   RecuperarContrasena: undefined;
   VerificarIdentidad: { email: string };
-  VerificarEmail: { email: string; roleId?: number };
+  VerificarEmail: { email: string; roleId?: number; pendingRegistration?: boolean };
   EstablecerNuevaContrasena: { email: string };
 
   RegistroPaciente: undefined;

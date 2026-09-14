@@ -42,6 +42,7 @@ const VerificarEmailScreen: React.FC = () => {
 
     const recipient = route.params?.email || '';
     const roleId = route.params?.roleId || 1; // Default to patient
+    const pendingRegistration = route.params?.pendingRegistration === true;
 
     const OTP_LENGTH = 6;
     const [otp, setOtp] = useState<string[]>(new Array(OTP_LENGTH).fill(''));
@@ -105,7 +106,7 @@ const VerificarEmailScreen: React.FC = () => {
 
         setIsLoading(true);
         try {
-            const data = await requestJson<any>('/api/auth/verify-email', {
+            const data = await requestJson<any>(pendingRegistration ? '/api/auth/register/confirm' : '/api/auth/verify-email', {
                 method: 'POST',
                 body: { email: recipient, codigo: code },
             });
@@ -140,7 +141,7 @@ const VerificarEmailScreen: React.FC = () => {
 
         setResendLoading(true);
         try {
-            const data = await requestJson<any>('/api/auth/resend-verification', {
+            const data = await requestJson<any>(pendingRegistration ? '/api/auth/resend-verification-pending' : '/api/auth/resend-verification', {
                 method: 'POST',
                 body: { email: recipient },
             });

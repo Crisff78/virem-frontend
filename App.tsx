@@ -1,7 +1,7 @@
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, useNavigation, type NavigationProp } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import * as Linking from "expo-linking";
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Platform, StyleSheet } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
@@ -55,11 +55,24 @@ import {
   PACIENTE_ROLE_ID,
   withRoleGuard,
 } from "./navigation/RoleGuard";
-import { AuthProvider } from "./providers/AuthProvider";
+import { AuthProvider, useAuth } from "./providers/AuthProvider";
 import { ThemeProvider } from "./providers/ThemeContext";
 import { SocketProvider } from "./providers/SocketProvider";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+function SessionRedirect() {
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const { isAuthenticated, isReady } = useAuth();
+  const wasAuthenticated = useRef(false);
+  useEffect(() => {
+    if (!isReady) return;
+    if (wasAuthenticated.current && !isAuthenticated) {
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }
+    wasAuthenticated.current = isAuthenticated;
+  }, [isAuthenticated, isReady, navigation]);
+  return null;
+}
 const linkingPrefixes = [Linking.createURL("/")];
 if (Platform.OS === "web" && typeof window !== "undefined") {
   linkingPrefixes.push(window.location.origin);
@@ -231,6 +244,7 @@ const App: React.FC = () => {
                   />
                 </Stack.Navigator>
                 <IncomingCallListener />
+                <SessionRedirect />
               </NavigationContainer>
             </SafeAreaView>
           </SocketProvider>

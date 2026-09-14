@@ -5,6 +5,7 @@ import React, { createRef, useRef, useState } from 'react';
 import { Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { RootStackParamList } from './navigation/types';
 import { requestJson } from './utils/api';
+import { clearRecoveryTicket, saveRecoveryTicket } from './utils/passwordRecovery';
 
 type VerificarIdentidadRouteProp = RouteProp<RootStackParamList, 'VerificarIdentidad'>;
 type NavigationProps = NativeStackNavigationProp<RootStackParamList, 'VerificarIdentidad'>;
@@ -109,8 +110,9 @@ const VerificarIdentidadScreen: React.FC = () => {
                 body: { email: recipient, codigo: code },
             });
 
-            if (data?.success) {
-                navigation.navigate('EstablecerNuevaContrasena', { email: recipient });
+            if (data?.success && typeof data.recoveryTicket === 'string' && data.recoveryTicket) {
+                saveRecoveryTicket(recipient, data.recoveryTicket);
+                navigation.replace('EstablecerNuevaContrasena', { email: recipient });
             } else {
                 Alert.alert("Error", data?.message || "Codigo incorrecto o expirado.");
             }
@@ -128,6 +130,7 @@ const VerificarIdentidadScreen: React.FC = () => {
         }
 
         setResendLoading(true);
+        clearRecoveryTicket();
         try {
             const data = await requestJson<any>('/api/auth/recovery/send-code', {
                 method: 'POST',

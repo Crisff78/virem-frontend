@@ -1,3 +1,4 @@
+import { apiClient } from './utils/api';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -163,7 +164,7 @@ const PacienteCitasScreen: React.FC = () => {
 
       const token = await getAuthToken();
       if (token) {
-        const profileResponse = await fetch(apiUrl('/api/users/me/paciente-profile'), {
+        const profileResponse = await apiClient.fetch(apiUrl('/api/users/me/paciente-profile'), {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -219,7 +220,7 @@ const PacienteCitasScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl('/api/agenda/me/citas?scope=all&limit=120'), {
+      const response = await apiClient.fetch(apiUrl('/api/agenda/me/citas?scope=all&limit=120'), {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -364,7 +365,7 @@ const PacienteCitasScreen: React.FC = () => {
       const currentStart = cita?.fechaHoraInicio ? new Date(cita.fechaHoraInicio) : new Date();
       const nextStart = new Date(currentStart.getTime() + 24 * 60 * 60 * 1000);
 
-      const response = await fetch(apiUrl(`/api/agenda/me/citas/${cita.citaid}/reprogramar`), {
+      const response = await apiClient.fetch(apiUrl(`/api/agenda/me/citas/${cita.citaid}/reprogramar`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -404,7 +405,7 @@ const PacienteCitasScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl(`/api/agenda/me/citas/${cita.citaid}/cancelar`), {
+      const response = await apiClient.fetch(apiUrl(`/api/agenda/me/citas/${cita.citaid}/cancelar`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

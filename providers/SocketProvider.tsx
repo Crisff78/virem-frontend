@@ -1,280 +1,185 @@
-import React, {
-    createContext,
-    useCallback,
-    useContext,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 import { BACKEND_URL } from '../config/backend';
 import { useAuth } from './AuthProvider';
 
-type SocketJoinAck = {
-    ok: boolean;
-    code?: string;
-    room?: string;
-    citaId?: string;
-    conversacionId?: string;
+type SocketJoinAck = { ok: boolean; code?: string; room?: string; citaId?: string; conversacionId?: string };
+type RoomEvent = 'conversation' | 'cita' | 'admin_monitoring';
+type ActiveRoom = {
+    type: RoomEvent;
+    id: string;
+    owners: number;
+    connection?: string;
+    pending?: Promise<SocketJoinAck>;
 };
-
 type SocketContextValue = {
     socket: Socket | null;
     isConnected: boolean;
     lastError: string;
     ensureConnected: () => Promise<Socket | null>;
-    joinConversation: (conversationId: string) => Promise<SocketJoinAck>;
-    leaveConversation: (conversationId: string) => void;
-    joinCita: (citaId: string) => Promise<SocketJoinAck>;
-    leaveCita: (citaId: string) => void;
+    joinConversation: (id: string) => Promise<SocketJoinAck>;
+    leaveConversation: (id: string) => void;
+    joinCita: (id: string) => Promise<SocketJoinAck>;
+    leaveCita: (id: string) => void;
     joinAdminMonitoring: () => Promise<SocketJoinAck>;
     leaveAdminMonitoring: () => void;
 };
-
 const SocketContext = createContext<SocketContextValue | null>(null);
-
 const normalizeText = (value: unknown) => String(value || '').trim();
-
-const SOCKET_ACK_TIMEOUT_MS = 5000;
-const SOCKET_CONNECT_TIMEOUT_MS = 5000;
+const roomKey = (type: RoomEvent, id: string) => type + ':' + id;
+const UNAVAILABLE: SocketJoinAck = { ok: false, code: 'socket_unavailable' };
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { token } = useAuth();
-    const socketRef = useRef<Socket | null>(null);
-    const cleanupSocketListenersRef = useRef<(() => void) | null>(null);
     const tokenRef = useRef('');
+    tokenRef.current = normalizeText(token);
+    const socketRef = useRef<Socket | null>(null);
+    const roomsRef = useRef(new Map<string, ActiveRoom>());
+    const cleanupRef = useRef<(() => void) | null>(null);
     const [socket, setSocket] = useState<Socket | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [lastError, setLastError] = useState('');
-    tokenRef.current = normalizeText(token);
 
-    const bindSocketState = useCallback((nextSocket: Socket) => {
-        const handleConnect = () => {
-            setIsConnected(true);
-            setLastError('');
-        };
-
-        const handleDisconnect = () => {
-            setIsConnected(false);
-        };
-
-        const handleConnectError = (error: Error) => {
-            setIsConnected(false);
-            setLastError(String(error?.message || 'socket_error'));
-        };
-
-        nextSocket.on('connect', handleConnect);
-        nextSocket.on('disconnect', handleDisconnect);
-        nextSocket.on('connect_error', handleConnectError);
-
-        return () => {
-            nextSocket.off('connect', handleConnect);
-            nextSocket.off('disconnect', handleDisconnect);
-            nextSocket.off('connect_error', handleConnectError);
-        };
+    const sendJoin = useCallback((current: Socket, room: ActiveRoom): Promise<SocketJoinAck> => {
+        const key = roomKey(room.type, room.id);
+        if (!current.connected || socketRef.current !== current || roomsRef.current.get(key) !== room) {
+            return Promise.resolve(UNAVAILABLE);
+        }
+        const connection = current.id;
+        if (room.connection === connection && room.pending) return room.pending;
+        room.connection = connection;
+        const pending = new Promise<SocketJoinAck>((resolve) => {
+            const ack = (error: Error | null, result: SocketJoinAck) => {
+                // A leave can run while the server is still authorizing this join.
+                if (!roomsRef.current.has(key) && current.connected) {
+                    current.emit('leave:' + room.type, ...(room.id ? [room.id] : []));
+                }
+                const value = error ? { ok: false, code: 'socket_ack_timeout' } : result || { ok: false, code: 'socket_ack_invalid' };
+                if (!value.ok && room.connection === connection) room.pending = undefined;
+                resolve(value);
+            };
+            current.timeout(5000).emit('join:' + room.type, ...(room.id ? [room.id] : []), ack);
+        });
+        room.pending = pending;
+        return pending;
     }, []);
 
-    const ensureSocket = useCallback(() => {
-        const cleanToken = normalizeText(tokenRef.current);
-        if (!cleanToken) return null;
-
-        if (!socketRef.current) {
-            const nextSocket = io(BACKEND_URL, {
-                transports: ['websocket'],
-                autoConnect: false,
-                auth: { token: cleanToken },
-            });
-            socketRef.current = nextSocket;
-            setSocket(nextSocket);
-            cleanupSocketListenersRef.current = bindSocketState(nextSocket);
-        }
-
-        socketRef.current.auth = { token: cleanToken };
-        return socketRef.current;
-    }, [bindSocketState]);
-
     const disposeSocket = useCallback(() => {
-        cleanupSocketListenersRef.current?.();
-        cleanupSocketListenersRef.current = null;
-
-        if (socketRef.current) {
-            socketRef.current.disconnect();
-            socketRef.current = null;
-        }
-
+        cleanupRef.current?.();
+        cleanupRef.current = null;
+        roomsRef.current.clear();
+        socketRef.current?.disconnect();
+        socketRef.current = null;
         setSocket(null);
         setIsConnected(false);
     }, []);
 
-    const ensureConnected = useCallback(async () => {
-        const nextSocket = ensureSocket();
-        if (!nextSocket) return null;
-        if (nextSocket.connected) return nextSocket;
-
-        return await new Promise<Socket | null>((resolve) => {
-            let settled = false;
-
-            const finish = (value: Socket | null) => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timer);
-                nextSocket.off('connect', onConnect);
-                nextSocket.off('connect_error', onError);
-                resolve(value);
+    const ensureSocket = useCallback(() => {
+        const cleanToken = tokenRef.current;
+        if (!cleanToken) return null;
+        if (socketRef.current && (socketRef.current.auth as { token?: string }).token !== cleanToken) {
+            disposeSocket();
+        }
+        if (!socketRef.current) {
+            const current = io(BACKEND_URL, { transports: ['websocket'], autoConnect: false, auth: { token: cleanToken } });
+            socketRef.current = current;
+            setSocket(current);
+            const onConnect = () => {
+                setIsConnected(true);
+                setLastError('');
+                // Socket.IO fires connect after initial connection AND every reconnect.
+                roomsRef.current.forEach(room => {
+                    void sendJoin(current, room).then(ack => {
+                        if (!ack.ok && socketRef.current === current) setLastError(ack.code || 'room_join_failed');
+                    });
+                });
             };
+            const onDisconnect = () => {
+                setIsConnected(false);
+                roomsRef.current.forEach(room => { room.connection = undefined; room.pending = undefined; });
+            };
+            const onError = () => { setIsConnected(false); setLastError('socket_connection_failed'); };
+            current.on('connect', onConnect);
+            current.on('disconnect', onDisconnect);
+            current.on('connect_error', onError);
+            cleanupRef.current = () => {
+                current.off('connect', onConnect);
+                current.off('disconnect', onDisconnect);
+                current.off('connect_error', onError);
+            };
+        }
+        return socketRef.current;
+    }, [disposeSocket, sendJoin]);
 
-            const onConnect = () => finish(nextSocket);
+    const ensureConnected = useCallback(async (): Promise<Socket | null> => {
+        const current = ensureSocket();
+        if (!current) return null;
+        if (current.connected) return current;
+        return new Promise(resolve => {
+            const finish = (value: Socket | null) => {
+                clearTimeout(timer);
+                current.off('connect', onConnect);
+                current.off('connect_error', onError);
+                current.off('disconnect', onError);
+                resolve(value && socketRef.current === current ? value : null);
+            };
+            const onConnect = () => finish(current);
             const onError = () => finish(null);
-            const timer = setTimeout(() => finish(null), SOCKET_CONNECT_TIMEOUT_MS);
-
-            nextSocket.once('connect', onConnect);
-            nextSocket.once('connect_error', onError);
-            nextSocket.connect();
+            const timer = setTimeout(onError, 5000);
+            current.once('connect', onConnect);
+            current.once('connect_error', onError);
+            current.once('disconnect', onError);
+            current.connect();
         });
     }, [ensureSocket]);
 
-    const emitWithAck = useCallback(
-        async (eventName: 'join:conversation' | 'join:cita', resourceId: string) => {
-            const nextSocket = await ensureConnected();
-            const cleanResourceId = normalizeText(resourceId);
-            if (!nextSocket || !cleanResourceId) {
-                return { ok: false, code: 'socket_unavailable' } as SocketJoinAck;
-            }
+    const joinRoom = useCallback(async (type: RoomEvent, resourceId = '') => {
+        const id = normalizeText(resourceId);
+        if ((type !== 'admin_monitoring' && !id) || !ensureSocket()) return UNAVAILABLE;
+        const key = roomKey(type, id);
+        const room = roomsRef.current.get(key) || { type, id, owners: 0 };
+        room.owners++;
+        roomsRef.current.set(key, room);
+        const current = await ensureConnected();
+        return current ? sendJoin(current, room) : UNAVAILABLE;
+    }, [ensureConnected, ensureSocket, sendJoin]);
 
-            return await new Promise<SocketJoinAck>((resolve) => {
-                let settled = false;
-
-                const finish = (value: SocketJoinAck) => {
-                    if (settled) return;
-                    settled = true;
-                    clearTimeout(timer);
-                    resolve(value);
-                };
-
-                const timer = setTimeout(
-                    () => finish({ ok: false, code: 'socket_ack_timeout' }),
-                    SOCKET_ACK_TIMEOUT_MS
-                );
-
-                nextSocket.emit(eventName, cleanResourceId, (response: SocketJoinAck) => {
-                    finish(response || { ok: false, code: 'socket_ack_invalid' });
-                });
-            });
-        },
-        [ensureConnected]
-    );
-
-    const joinAdminMonitoring = useCallback(async () => {
-        const nextSocket = await ensureConnected();
-        if (!nextSocket) return { ok: false, code: 'socket_unavailable' } as SocketJoinAck;
-
-        return await new Promise<SocketJoinAck>((resolve) => {
-            let settled = false;
-            const finish = (value: SocketJoinAck) => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timer);
-                resolve(value);
-            };
-
-            const timer = setTimeout(
-                () => finish({ ok: false, code: 'socket_ack_timeout' }),
-                SOCKET_ACK_TIMEOUT_MS
-            );
-
-            nextSocket.emit('join:admin_monitoring', (response: SocketJoinAck) => {
-                finish(response || { ok: false, code: 'socket_ack_invalid' });
-            });
-        });
-    }, [ensureConnected]);
-
-    const leaveAdminMonitoring = useCallback(() => {
-        if (!socketRef.current) return;
-        socketRef.current.emit('leave:admin_monitoring');
+    const leaveRoom = useCallback((type: RoomEvent, resourceId = '') => {
+        const id = normalizeText(resourceId);
+        const key = roomKey(type, id);
+        const room = roomsRef.current.get(key);
+        if (!room || --room.owners > 0) return;
+        roomsRef.current.delete(key);
+        // Never buffer a stale leave while offline: the next connect restores only active rooms.
+        if (socketRef.current?.connected) {
+            socketRef.current.emit('leave:' + type, ...(id ? [id] : []));
+        }
     }, []);
 
-    const joinConversation = useCallback(
-        async (conversationId: string) => emitWithAck('join:conversation', conversationId),
-        [emitWithAck]
-    );
-
-    const leaveConversation = useCallback((conversationId: string) => {
-        const cleanConversationId = normalizeText(conversationId);
-        if (!socketRef.current || !cleanConversationId) return;
-        socketRef.current.emit('leave:conversation', cleanConversationId);
-    }, []);
-
-    const joinCita = useCallback(
-        async (citaId: string) => emitWithAck('join:cita', citaId),
-        [emitWithAck]
-    );
-
-    const leaveCita = useCallback((citaId: string) => {
-        const cleanCitaId = normalizeText(citaId);
-        if (!socketRef.current || !cleanCitaId) return;
-        socketRef.current.emit('leave:cita', cleanCitaId);
-    }, []);
+    const joinConversation = useCallback((id: string) => joinRoom('conversation', id), [joinRoom]);
+    const leaveConversation = useCallback((id: string) => leaveRoom('conversation', id), [leaveRoom]);
+    const joinCita = useCallback((id: string) => joinRoom('cita', id), [joinRoom]);
+    const leaveCita = useCallback((id: string) => leaveRoom('cita', id), [leaveRoom]);
+    const joinAdminMonitoring = useCallback(() => joinRoom('admin_monitoring'), [joinRoom]);
+    const leaveAdminMonitoring = useCallback(() => leaveRoom('admin_monitoring'), [leaveRoom]);
 
     useEffect(() => {
-        const cleanToken = normalizeText(token);
-
-        if (!cleanToken) {
-            tokenRef.current = '';
-            disposeSocket();
-            setLastError('');
-            return;
-        }
-
-        const currentAuthToken = normalizeText((socketRef.current?.auth as any)?.token);
-        if (socketRef.current && currentAuthToken !== cleanToken) {
-            disposeSocket();
-        }
-
-        tokenRef.current = cleanToken;
+        if (!token) { disposeSocket(); setLastError(''); }
+        else if (socketRef.current && (socketRef.current.auth as { token?: string }).token !== token) disposeSocket();
     }, [disposeSocket, token]);
+    useEffect(() => disposeSocket, [disposeSocket]);
 
-    useEffect(() => {
-        return () => {
-            disposeSocket();
-        };
-    }, [disposeSocket]);
-
-    const value = useMemo<SocketContextValue>(
-        () => ({
-            socket,
-            isConnected,
-            lastError,
-            ensureConnected,
-            joinConversation,
-            leaveConversation,
-            joinCita,
-            leaveCita,
-            joinAdminMonitoring,
-            leaveAdminMonitoring,
-        }),
-        [
-            ensureConnected,
-            isConnected,
-            joinCita,
-            joinConversation,
-            lastError,
-            leaveCita,
-            leaveConversation,
-            joinAdminMonitoring,
-            leaveAdminMonitoring,
-            socket,
-        ]
-    );
-
+    const value = useMemo(() => ({
+        socket, isConnected, lastError, ensureConnected, joinConversation, leaveConversation,
+        joinCita, leaveCita, joinAdminMonitoring, leaveAdminMonitoring,
+    }), [socket, isConnected, lastError, ensureConnected, joinConversation, leaveConversation,
+        joinCita, leaveCita, joinAdminMonitoring, leaveAdminMonitoring]);
     return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
 };
 
 export function useSocket() {
     const context = useContext(SocketContext);
-    if (!context) {
-        throw new Error('useSocket must be used within SocketProvider');
-    }
+    if (!context) throw new Error('useSocket must be used within SocketProvider');
     return context;
 }

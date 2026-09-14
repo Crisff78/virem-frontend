@@ -1,3 +1,4 @@
+import { apiClient } from '../utils/api';
 import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import {
   Alert,
@@ -156,7 +157,7 @@ const MedicoNotificationDrawer: React.FC = () => {
     try {
       const token = await getAuthToken();
       if (!token) return;
-      const response = await fetch(apiUrl('/api/agenda/me/notificaciones?limit=80'), {
+      const response = await apiClient.fetch(apiUrl('/api/agenda/me/notificaciones?limit=80'), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const payload = await response.json();
@@ -195,7 +196,7 @@ const MedicoNotificationDrawer: React.FC = () => {
     try {
       const token = await getAuthToken();
       if (!token) return;
-      const res = await fetch(apiUrl('/api/agenda/me/notificaciones/leer-todas'), {
+      const res = await apiClient.fetch(apiUrl('/api/agenda/me/notificaciones/leer-todas'), {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -207,7 +208,7 @@ const MedicoNotificationDrawer: React.FC = () => {
     try {
       const token = await getAuthToken();
       if (!token) return;
-      await fetch(apiUrl(`/api/agenda/me/notificaciones/${id}/leida`), {
+      await apiClient.fetch(apiUrl(`/api/agenda/me/notificaciones/${id}/leida`), {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
       });

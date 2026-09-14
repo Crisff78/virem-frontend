@@ -1,3 +1,4 @@
+import { apiClient } from '../../utils/api';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -269,7 +270,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
       const currentStart = nextCita.fechaHoraInicio ? new Date(nextCita.fechaHoraInicio) : new Date();
       const newStart = new Date(currentStart.getTime() + hoursAhead * 60 * 60 * 1000);
 
-      const response = await fetch(apiUrl(`/api/agenda/me/citas/${nextCita.citaid}/reprogramar`), {
+      const response = await apiClient.fetch(apiUrl(`/api/agenda/me/citas/${nextCita.citaid}/reprogramar`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -327,7 +328,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
           return;
         }
 
-        const response = await fetch(apiUrl('/api/agenda/me/citas?scope=upcoming&limit=40'), {
+        const response = await apiClient.fetch(apiUrl('/api/agenda/me/citas?scope=upcoming&limit=40'), {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -404,7 +405,7 @@ const SalaEsperaVirtualPacienteScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl(`/api/agenda/me/citas/${citaId}/video-sala`), {
+      const response = await apiClient.fetch(apiUrl(`/api/agenda/me/citas/${citaId}/video-sala`), {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
       });

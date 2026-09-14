@@ -97,10 +97,13 @@ const LoginScreen: React.FC = () => {
   // Admin 2FA State
   const [adminCodeSent, setAdminCodeSent] = useState(false);
   const [adminCodeInput, setAdminCodeInput] = useState('');
-  const [generatedCode, setGeneratedCode] = useState('');
-  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [mfaChallengeId, setMfaChallengeId] = useState('');
 
-  const isAdminCredentials = email.trim().toLowerCase() === 'admin' && password === 'AdminPassword123!';
+  const resetMfa = () => {
+    setAdminCodeSent(false);
+    setAdminCodeInput('');
+    setMfaChallengeId('');
+  };
 
   const validateEmail = (value: string) => {
     const v = value.trim();
@@ -115,7 +118,7 @@ const LoginScreen: React.FC = () => {
     return '';
   };
 
-  const handleLogin = async () => {
+  const handleLogin = async (resendMfa = false) => {
     if (isLoading) return; // evita doble envío
 
     const emailTrim = email.toLowerCase().trim();
@@ -129,27 +132,31 @@ const LoginScreen: React.FC = () => {
     setPasswordError(pErr);
     if (eErr || pErr) return;
 
-    // Flujo Admin con 2FA (se mantiene igual, pero con mensajes visibles)
-    if (emailTrim === 'admin' && password === 'AdminPassword123!') {
-      if (!adminCodeSent) {
-        setNotice({ type: 'info', text: 'Primero envía y verifica el código de seguridad.' });
-        return;
-      }
-      if (adminCodeInput !== generatedCode) {
-        setNotice({ type: 'error', text: 'El código de seguridad es incorrecto.' });
-        return;
-      }
-    }
-
     setIsLoading(true);
 
     try {
       const data = await apiClient.post<any>('/api/auth/login', {
-        body: { email: emailTrim, password },
+        body: {
+          email: emailTrim, password,
+          ...(adminCodeSent && !resendMfa ? { otp: adminCodeInput, mfaChallengeId } : {}),
+          ...(resendMfa ? { resendMfa: true } : {}),
+        },
       });
+
+      if (data?.mfaRequired) {
+        setMfaChallengeId(data.mfaChallengeId);
+        setAdminCodeSent(true);
+        setAdminCodeInput('');
+        setNotice({ type: 'info', text: data.message });
+        return;
+      }
 
       const token = data?.token ?? data?.data?.token ?? '';
       const userProfile = data?.user ?? data?.data?.user ?? null;
+      if (!token || !userProfile) {
+        setNotice({ type: 'error', text: 'No se pudo completar el inicio de sesión.' });
+        return;
+      }
       const cachedMedico = await getCachedMedicoProfileByEmail(emailTrim);
       const responseRoleId = Number(userProfile?.rolid ?? userProfile?.rolId ?? userProfile?.roleId);
       const shouldMergeMedicoCache = responseRoleId === 2;
@@ -168,6 +175,8 @@ const LoginScreen: React.FC = () => {
           : userProfile;
 
       await signIn(token, mergedProfile);
+      setPassword('');
+      resetMfa();
       const rolid = Number(mergedProfile?.rolid);
       const targetRoute: keyof RootStackParamList =
         rolid === 3 ? 'AdminPanel' : rolid === 2 ? 'DashboardMedico' : 'DashboardPaciente';
@@ -176,7 +185,11 @@ const LoginScreen: React.FC = () => {
 
     } catch (err: any) {
       if (err instanceof ApiError) {
-        if (err.status === 401) {
+        const details = err.data as { mfaRequired?: boolean } | null;
+        if (details?.mfaRequired) {
+          setAdminCodeSent(true);
+          setNotice({ type: 'error', text: err.message });
+        } else if (err.status === 401) {
           // Mensaje genérico por seguridad: no revelamos qué campo falló.
           setNotice({ type: 'error', text: 'Correo o contraseña incorrectos. Revise sus datos.' });
         } else if (err.status === 403) {
@@ -197,42 +210,6 @@ const LoginScreen: React.FC = () => {
     }
   };
 
-  const handleSendAdminCode = async () => {
-    setIsSendingCode(true);
-    setNotice(null);
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedCode(code);
-
-    try {
-      // Make.com Webhook Integration
-      const webhookUrl = 'https://hook.us2.make.com/mihua6oq9816sr7l3050cmmjnqihlx8x';
-
-      const formData = new URLSearchParams();
-      formData.append('type', 'admin_2fa');
-      formData.append('email', 'yaslyncastillo21@gmail.com');
-      formData.append('code', code);
-      formData.append('user', 'Admin');
-      formData.append('timestamp', new Date().toISOString());
-
-      await fetch(webhookUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: formData.toString(),
-      });
-
-      setAdminCodeSent(true);
-      setNotice({ type: 'info', text: 'Código enviado. Revisa el correo yaslyncastillo21@gmail.com para obtener tu código de acceso.' });
-    } catch (error) {
-      // Si no hay webhook seguimos permitiéndolo pero avisamos
-      console.error('Error sending code:', error);
-      setAdminCodeSent(true);
-      setNotice({ type: 'info', text: 'Se generó el código (ver consola) pero falló la conexión con el servidor de correos.' });
-      console.log('CODIGO GENERADO:', code);
-    } finally {
-      setIsSendingCode(false);
-    }
-  };
 
   const handleForgotPassword = () => navigation.navigate('RecuperarContrasena');
   const handleGoToRegister = () => navigation.navigate('SeleccionPerfil');
@@ -296,8 +273,10 @@ const LoginScreen: React.FC = () => {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={email}
+                editable={!isLoading}
                 onChangeText={(t) => {
                   setEmail(t);
+                  resetMfa();
                   if (notice) setNotice(null);
                   if (submitted) setEmailError(validateEmail(t));
                 }}
@@ -320,8 +299,10 @@ const LoginScreen: React.FC = () => {
                 placeholderTextColor={COLORS.iconColor}
                 secureTextEntry={!showPassword}
                 value={password}
+                editable={!isLoading}
                 onChangeText={(t) => {
                   setPassword(t);
+                  resetMfa();
                   if (notice) setNotice(null);
                   if (submitted) setPasswordError(validatePassword(t));
                 }}
@@ -337,16 +318,16 @@ const LoginScreen: React.FC = () => {
             </View>
             {passwordHasError && <Text style={styles.fieldError}>{passwordError}</Text>}
 
-            {isAdminCredentials && !adminCodeSent && (
+            {adminCodeSent && (
               <TouchableOpacity
-                style={[styles.adminCodeBtn, { opacity: isSendingCode ? 0.7 : 1 }]}
-                onPress={handleSendAdminCode}
-                disabled={isSendingCode}
+                style={[styles.adminCodeBtn, { opacity: isLoading ? 0.7 : 1 }]}
+                onPress={() => handleLogin(true)}
+                disabled={isLoading}
               >
-                {isSendingCode ? (
+                {isLoading ? (
                   <ActivityIndicator color={COLORS.primary} size="small" />
                 ) : (
-                  <Text style={styles.adminCodeBtnText}>ENVIAR CÓDIGO DE SEGURIDAD</Text>
+                  <Text style={styles.adminCodeBtnText}>REENVIAR CÓDIGO DE SEGURIDAD</Text>
                 )}
               </TouchableOpacity>
             )}
@@ -405,7 +386,7 @@ const LoginScreen: React.FC = () => {
             <TouchableOpacity
               style={[styles.button, { opacity: isLoading ? 0.7 : 1 }]}
               activeOpacity={0.8}
-              onPress={handleLogin}
+              onPress={() => handleLogin()}
               disabled={isLoading}
             >
               {isLoading ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Iniciar Sesión</Text>}

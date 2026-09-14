@@ -1,3 +1,4 @@
+import { apiClient } from './utils/api';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -95,7 +96,6 @@ const RegistroCredencialesScreen: React.FC = () => {
     }
 
     const dpAny = route.params.datosPersonales;
-    console.log('📦 Datos personales recibidos:', JSON.stringify(dpAny, null, 2));
 
     // Validamos que al menos existan los datos básicos para no bloquear el flujo
     if (!dpAny || typeof dpAny !== 'object') {
@@ -146,11 +146,8 @@ const RegistroCredencialesScreen: React.FC = () => {
         password: String(password),
       };
 
-      console.log('🌐 BACKEND_URL:', BACKEND_URL);
-      console.log('🌐 Register URL:', apiUrl('/api/auth/register'));
-      console.log('📦 Enviando body register:', bodyCompleto);
 
-      const response = await fetch(apiUrl('/api/auth/register'), {
+      const response = await apiClient.fetch(apiUrl('/api/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyCompleto),
@@ -170,7 +167,6 @@ const RegistroCredencialesScreen: React.FC = () => {
         setResendCooldown(30);
         
         if (res.devVerificationCode) {
-          console.log(`[DEV] Código de verificación: ${res.devVerificationCode}`);
           // Mostrar en alert solo en desarrollo para facilitar pruebas
           if (__DEV__) {
             showAlert('MODO DESARROLLO', `El código es: ${res.devVerificationCode}\n(Esto solo se ve en desarrollo porque el correo falló o está en modo fallback)`);
@@ -205,7 +201,7 @@ const RegistroCredencialesScreen: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(apiUrl('/api/auth/register/confirm'), {
+      const response = await apiClient.fetch(apiUrl('/api/auth/register/confirm'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -242,7 +238,7 @@ const RegistroCredencialesScreen: React.FC = () => {
 
     try {
       const emailTrim = email.toLowerCase().trim();
-      const response = await fetch(apiUrl('/api/auth/resend-verification-pending'), {
+      const response = await apiClient.fetch(apiUrl('/api/auth/resend-verification-pending'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailTrim }),

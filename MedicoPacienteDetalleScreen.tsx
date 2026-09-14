@@ -10,6 +10,8 @@ import {
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from './navigation/types';
 import { apiClient } from './utils/api';
 import { formatCedula, formatPhone } from './utils/formatters';
 
@@ -42,8 +44,8 @@ type PatientDetails = {
 };
 
 const MedicoPacienteDetalleScreen: React.FC = () => {
-  const route = useRoute<RouteProp<{ params: { patientId: string; patientName: string } }, 'params'>>();
-  const navigation = useNavigation();
+  const route = useRoute<RouteProp<RootStackParamList, 'MedicoPacienteDetalle'>>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'MedicoPacienteDetalle'>>();
   const { patientId, patientName } = route.params || { patientId: '', patientName: 'Paciente' };
 
   const [loading, setLoading] = useState(true);
@@ -197,7 +199,7 @@ const MedicoPacienteDetalleScreen: React.FC = () => {
 
         <TouchableOpacity 
           style={styles.actionBtn}
-          onPress={() => navigation.navigate('MedicoRecetas' as any, { 
+          onPress={() => navigation.navigate('MedicoRecetas', {
             prefill: { 
               pacienteId: patientId, 
               pacienteNombre: displayName,

@@ -15,7 +15,8 @@ import {
   View,
 } from 'react-native';
 import { RootStackParamList } from './navigation/types';
-import { requestJson } from './utils/api';
+import { ApiError, requestJson } from './utils/api';
+import { clearRecoveryTicket, getRecoveryTicket } from './utils/passwordRecovery';
 
 type NavigationProps = NativeStackNavigationProp<
   RootStackParamList,
@@ -80,6 +81,13 @@ const EstablecerNuevaContrasenaScreen: React.FC = () => {
       return;
     }
 
+    const recoveryTicket = getRecoveryTicket(email);
+    if (!recoveryTicket) {
+      Alert.alert('Verificacion requerida', 'Solicita un nuevo codigo para cambiar tu contrasena.');
+      navigation.replace('RecuperarContrasena');
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       Alert.alert('Error', 'Las contrasenas no coinciden.');
       return;
@@ -103,23 +111,34 @@ const EstablecerNuevaContrasenaScreen: React.FC = () => {
         body: {
           email: email?.toLowerCase().trim(),
           newPassword: newPassword,
+          recoveryTicket,
         },
       });
 
       if (data?.success) {
+        clearRecoveryTicket();
+        setNewPassword('');
+        setConfirmPassword('');
         Alert.alert('Exito', 'Contrasena actualizada. Ya puedes iniciar sesion.');
-        navigation.navigate('Login');
+        navigation.replace('Login');
       } else {
         Alert.alert('Error', data?.message || 'No se pudo actualizar.');
       }
     } catch (error: any) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        clearRecoveryTicket();
+        navigation.replace('RecuperarContrasena');
+      }
       Alert.alert('Error', error?.message || 'No hay conexion con el servidor.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleBackToLogin = () => navigation.navigate('Login');
+  const handleBackToLogin = () => {
+    clearRecoveryTicket();
+    navigation.replace('Login');
+  };
 
   return (
     <ScrollView
