@@ -1,12 +1,16 @@
 import { useWindowDimensions } from 'react-native';
+import { contentMaxWidth, horizontalPadding } from '../theme/spacing';
 
 // iPhone 14 Pro es la referencia de diseño base
 const BASE_WIDTH = 390;
 
 export const BREAKPOINTS = {
+  smallPhone: 360,
+  phone: 480,
   tablet: 600,
   desktop: 1024,
-};
+  wide: 1440,
+} as const;
 
 export const useResponsive = () => {
   const { width, height } = useWindowDimensions();
@@ -15,8 +19,10 @@ export const useResponsive = () => {
   const isTablet  = width >= BREAKPOINTS.tablet && width < BREAKPOINTS.desktop;
   const isDesktop = width >= BREAKPOINTS.desktop;
 
-  const isSmallMobile  = width < 360;
-  const isLargeDesktop = width >= 1440;
+  const isSmallMobile  = width < BREAKPOINTS.smallPhone;
+  const isLargeDesktop = width >= BREAKPOINTS.wide;
+  const isPhone = isMobile;
+  const isLandscape = width > height;
 
   // Escala tipografía relativa al ancho de pantalla.
   // Clamp: mínimo 75% (phones pequeños), máximo 160% (tablets grandes).
@@ -56,6 +62,14 @@ export const useResponsive = () => {
     return options.mobile;
   };
 
+  // Clamped spacing: never outside min/max whatever the device.
+  const clamp = (value: number, min: number, max: number): number =>
+    Math.min(Math.max(rs(value), min), max);
+
+  // Layout values shared with ResponsiveContainer.
+  const paddingH = horizontalPadding(width);
+  const maxContent = contentMaxWidth(width);
+
   return {
     width,
     height,
@@ -70,5 +84,10 @@ export const useResponsive = () => {
     hp,
     typography,
     select,
+    isPhone,
+    isLandscape,
+    clamp,
+    paddingH,
+    maxContent,
   };
 };
