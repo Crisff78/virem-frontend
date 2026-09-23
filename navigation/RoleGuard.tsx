@@ -5,7 +5,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useAuth } from '../providers/AuthProvider';
 import type { RootStackParamList } from './types';
-import { colors } from '../theme/colors';
 
 export const PACIENTE_ROLE_ID = 1;
 export const MEDICO_ROLE_ID = 2;
@@ -39,7 +38,7 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({ allowedRoles, children }) 
     if (!isReady) return;
 
     if (!isAuthenticated) {
-      navigation.reset({ index: 0, routes: [{ name: 'Landing' }] });
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
       return;
     }
 
@@ -85,10 +84,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: colors.bg,
+    backgroundColor: '#F6FAFD',
   },
   text: {
-    color: colors.muted,
+    color: '#4A7FA7',
     fontSize: 13,
     fontWeight: '700',
   },

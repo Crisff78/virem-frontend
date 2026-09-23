@@ -1,15 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  LayoutAnimation,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  UIManager,
   useWindowDimensions,
   View,
+  Modal,
 } from 'react-native';
 import type { ImageSourcePropType } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -87,6 +90,18 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
   const [backendDoctors, setBackendDoctors] = useState<Doctor[]>([]);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
+  // Enable LayoutAnimation on Android
+  if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+
+  const toggleFilters = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFiltersOpen(prev => !prev);
+  };
 
   const rs = (size: number) => size; // Simple responsive size mock for now
 
@@ -176,6 +191,11 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
 
   const { isInsidePortal, isSidebarOpen, toggleSidebar } = usePacienteModule();
   const { isDesktop: isDesktopLayout } = useResponsive();
+  
+  // Dedicated close function to avoid toggle-on-close race conditions
+  const closeSidebar = useCallback(() => {
+    if (isSidebarOpen) toggleSidebar();
+  }, [isSidebarOpen, toggleSidebar]);
 
   return (
     <View style={[styles.container, !isInsidePortal && isDesktopLayout && { flexDirection: 'row' }]}>
@@ -183,7 +203,7 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
         <PacienteSidebar
           isMobileMenuOpen={isSidebarOpen}
           onToggleMobileMenu={toggleSidebar}
-          onCloseMobileMenu={toggleSidebar}
+          onCloseMobileMenu={closeSidebar}
         />
       )}
       <View style={{ flex: 1 }}>
@@ -209,7 +229,7 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
 
           <TouchableOpacity
             style={styles.notifBtn}
-            onPress={() => navigation.navigate('PacienteNotificaciones')}
+            onPress={() => setIsNotificationsOpen(true)}
           >
             <MaterialIcons name="notifications" size={22} color={colors.dark} />
             <View style={styles.notifDot} />
@@ -242,6 +262,19 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
 
         <View style={[styles.layoutRow, !isDesktopLayout && styles.layoutRowMobile]}>
           <View style={[styles.filtersCol, !isDesktopLayout && styles.filtersColMobile]}>
+            {/* Collapsible toggle button — available on all screen sizes */}
+            <TouchableOpacity
+              style={styles.filtersToggleBtn}
+              onPress={toggleFilters}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="tune" size={18} color={colors.primary} />
+              <Text style={styles.filtersToggleText}>{filtersOpen ? 'Ocultar filtros' : 'Mostrar filtros'}</Text>
+              <MaterialIcons name={filtersOpen ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={20} color={colors.primary} />
+            </TouchableOpacity>
+
+            {/* Filters content - shown only when toggled open */}
+            {filtersOpen && (
             <View style={styles.filtersCard}>
               <View style={styles.filtersHeader}>
                 <Text style={styles.filtersTitle}>Filtros</Text>
@@ -279,6 +312,7 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
                 <Text style={styles.optionText}>4.0 +</Text>
               </TouchableOpacity>
             </View>
+            )}
           </View>
 
           <View style={styles.resultsCol}>
@@ -392,6 +426,38 @@ const EspecialistasPorEspecialidadScreen: React.FC = () => {
           </View>
         </View>
         </ScrollView>
+
+        {/* Notificaciones Modal Overlay */}
+        <Modal
+          visible={isNotificationsOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setIsNotificationsOpen(false)}
+        >
+          <View style={styles.modalRoot}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setIsNotificationsOpen(false)}
+            />
+            <View style={[styles.drawerRight]}>
+              <View style={styles.drawerHeader}>
+                <Text style={styles.drawerTitle}>Notificaciones</Text>
+                <TouchableOpacity onPress={() => setIsNotificationsOpen(false)}>
+                  <MaterialIcons name="close" size={24} color={colors.dark} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView>
+                <View style={[styles.emptyCard, { borderStyle: 'solid', marginTop: 40, borderWidth: 0 }]}>
+                  <MaterialIcons name="notifications-none" size={40} color={colors.muted} />
+                  <Text style={{ color: colors.muted, fontWeight: '600', marginTop: 10, fontSize: 14 }}>
+                    No tienes notificaciones
+                  </Text>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </View>
     </View>
   );
@@ -501,10 +567,32 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 
-  layoutRow: { flexDirection: 'row', gap: 16, alignItems: 'flex-start' },
+  layoutRow: { flexDirection: 'column', gap: 12, alignItems: 'stretch' },
   layoutRowMobile: { flexDirection: 'column' },
-  filtersCol: { width: 240 },
-  filtersColMobile: { width: '100%' },
+  filtersCol: { width: '100%' },
+  filtersColMobile: { width: '100%', marginBottom: 10 },
+  filtersToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e4edf6',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    shadowColor: colors.dark,
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  filtersToggleText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '800',
+  },
   resultsCol: { flex: 1 },
 
   filtersCard: {
@@ -657,10 +745,35 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  modalRoot: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+  },
+  drawerRight: {
+    backgroundColor: '#fff',
+    width: Platform.OS === 'web' ? 320 : '100%',
+    height: Platform.OS === 'web' ? '100%' : 400,
+    borderTopLeftRadius: Platform.OS === 'web' ? 0 : 20,
+    borderTopRightRadius: Platform.OS === 'web' ? 0 : 20,
+    padding: 20,
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  drawerTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.dark,
+  },
 });
 
 const EspecialistasPorEspecialidadScreenWrapper: React.FC = (props) => (
-  <PacienteModuleProvider>
+  <PacienteModuleProvider initialModule="NuevaConsultaPaciente">
     <EspecialistasPorEspecialidadScreen {...props} />
   </PacienteModuleProvider>
 );

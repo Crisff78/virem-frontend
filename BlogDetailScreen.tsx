@@ -6,7 +6,6 @@ import { RootStackParamList } from './navigation/types';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 type BlogDetailRouteProp = RouteProp<RootStackParamList, 'BlogDetail'>;
-type BlogDetailNavProp = NativeStackNavigationProp<RootStackParamList, 'BlogDetail'>;
 
 const colors = {
   primary: '#2B6CB0',
@@ -19,7 +18,7 @@ const colors = {
 
 const BlogDetailScreen: React.FC = () => {
   const route = useRoute<BlogDetailRouteProp>();
-  const navigation = useNavigation<BlogDetailNavProp>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { category, title, description, image } = route.params;
 
   return (
@@ -42,7 +41,7 @@ const BlogDetailScreen: React.FC = () => {
         <Text style={styles.title}>{title}</Text>
 
         {/* Featured Image */}
-        <Image source={{ uri: image }} style={styles.featuredImage} resizeMode="cover" />
+        <Image source={typeof image === 'string' ? { uri: image } : image} style={styles.featuredImage} resizeMode="cover" />
 
         {/* Description / Content */}
         <View style={styles.articleBody}>
@@ -78,7 +77,7 @@ const BlogDetailScreen: React.FC = () => {
         <Text style={styles.ctaTitle}>¿Necesitas hablar con un profesional?</Text>
         <TouchableOpacity 
           style={styles.ctaButton}
-          onPress={() => navigation.navigate('Landing')}
+          onPress={() => navigation.navigate('Landing' as any)}
         >
           <Text style={styles.ctaButtonText}>Agendar una consulta</Text>
         </TouchableOpacity>

@@ -1,8 +1,7 @@
-// @ts-nocheck
-import React, { useCallback, useMemo, useState } from "react";
 import { Alert, Platform } from "react-native";
+import { useCallback, useMemo, useState } from "react";
 import * as ImagePicker from "expo-image-picker";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { RootStackParamList } from "../navigation/types";
 import { createMedicoDraftKey, persistMedicoDraft } from "../utils/medicoRegistrationDraft";
@@ -85,6 +84,7 @@ export type RegistroMedicoFormController = {
   closeEspecialidadModal: () => void;
   selectEspecialidad: (value: string) => void;
   pickImage: () => Promise<void>;
+  pickSupportingDocument: (field: RegistroMedicoDocumentField) => Promise<void>;
   handleContinue: () => Promise<void>;
   handleCancel: () => void;
 };
@@ -117,6 +117,8 @@ const INITIAL_MODALS: RegistroMedicoModalState = {
   showPrefixModal: false,
   showEspModal: false,
 };
+
+const DOCUMENT_FIELDS: any[] = [];
 
 export function useRegistroMedicoForm(
   navigation: NavigationProps
@@ -161,15 +163,15 @@ export function useRegistroMedicoForm(
   }, [values.espQuery]);
 
   const updateValues = useCallback((patch: Partial<RegistroMedicoFormValues>) => {
-    setValues((current: RegistroMedicoFormValues) => ({ ...current, ...patch }));
+    setValues((current) => ({ ...current, ...patch }));
   }, []);
 
   const updateErrors = useCallback((patch: Partial<RegistroMedicoFormErrors>) => {
-    setErrors((current: RegistroMedicoFormErrors) => ({ ...current, ...patch }));
+    setErrors((current) => ({ ...current, ...patch }));
   }, []);
 
   const updateModals = useCallback((patch: Partial<RegistroMedicoModalState>) => {
-    setModals((current: RegistroMedicoModalState) => ({ ...current, ...patch }));
+    setModals((current) => ({ ...current, ...patch }));
   }, []);
 
   const setNombreCompleto = useCallback(
@@ -300,8 +302,13 @@ export function useRegistroMedicoForm(
     }
   }, [updateErrors, updateValues]);
 
+  const pickSupportingDocument = useCallback(
+    async (field: any) => {},
+    []
+  );
+
   const handleContinue = useCallback(async () => {
-    setErrors((current: RegistroMedicoFormErrors) => ({
+    setErrors((current) => ({
       ...current,
       showErrors: true,
       cedulaError: false,
@@ -446,6 +453,7 @@ export function useRegistroMedicoForm(
     closeEspecialidadModal,
     selectEspecialidad,
     pickImage,
+    pickSupportingDocument,
     handleContinue,
     handleCancel,
   };

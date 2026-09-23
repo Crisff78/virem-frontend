@@ -69,9 +69,14 @@ const readRawUser = async (): Promise<string | null> => {
         return getWebItem(USER_PROFILE_KEY) || getWebItem(USER_KEY);
     }
 
-    return (
+    const secureUser =
         (await SecureStore.getItemAsync(USER_PROFILE_KEY)) ||
-        (await SecureStore.getItemAsync(USER_KEY))
+        (await SecureStore.getItemAsync(USER_KEY));
+    if (secureUser) return secureUser;
+
+    return (
+        (await AsyncStorage.getItem(USER_PROFILE_KEY)) ||
+        (await AsyncStorage.getItem(USER_KEY))
     );
 };
 
@@ -84,8 +89,12 @@ export async function getAuthToken(): Promise<string> {
     const secureToken =
         (await SecureStore.getItemAsync(AUTH_TOKEN_KEY)) ||
         (await SecureStore.getItemAsync(LEGACY_TOKEN_KEY));
-    
-    return normalizeText(secureToken);
+    if (secureToken?.trim()) return normalizeText(secureToken);
+
+    const asyncToken =
+        (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) ||
+        (await AsyncStorage.getItem(LEGACY_TOKEN_KEY));
+    return normalizeText(asyncToken);
 }
 
 export async function getSessionUser<TUser = Record<string, unknown>>(): Promise<TUser | null> {
@@ -123,12 +132,16 @@ export async function saveSession<TUser = Record<string, unknown>>(
     if (token) {
         await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
         await SecureStore.setItemAsync(LEGACY_TOKEN_KEY, token);
+        await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+        await AsyncStorage.setItem(LEGACY_TOKEN_KEY, token);
     }
 
     if (userProfile !== undefined) {
         const raw = JSON.stringify(userProfile);
         await SecureStore.setItemAsync(USER_PROFILE_KEY, raw);
         await SecureStore.setItemAsync(USER_KEY, raw);
+        await AsyncStorage.setItem(USER_PROFILE_KEY, raw);
+        await AsyncStorage.setItem(USER_KEY, raw);
     }
 
     const snapshot = await loadSession<TUser>();
@@ -146,6 +159,7 @@ export async function clearSessionUser(): Promise<SessionSnapshot> {
     if (isWeb) {
         removeWebItems([USER_PROFILE_KEY, USER_KEY]);
     } else {
+        await AsyncStorage.multiRemove([USER_PROFILE_KEY, USER_KEY]);
         await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
         await SecureStore.deleteItemAsync(USER_KEY);
     }
@@ -159,12 +173,11 @@ export async function clearSession(): Promise<SessionSnapshot> {
     if (isWeb) {
         removeWebItems(SESSION_KEYS);
     } else {
-        await Promise.all([
-            SecureStore.deleteItemAsync(AUTH_TOKEN_KEY),
-            SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY),
-            SecureStore.deleteItemAsync(USER_PROFILE_KEY),
-            SecureStore.deleteItemAsync(USER_KEY)
-        ]);
+        await AsyncStorage.multiRemove(SESSION_KEYS);
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
+        await SecureStore.deleteItemAsync(USER_KEY);
     }
 
     const snapshot = { token: '', user: null };

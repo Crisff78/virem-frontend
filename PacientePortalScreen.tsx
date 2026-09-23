@@ -3,14 +3,14 @@ import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { PacienteModuleProvider, usePacienteModule, PORTAL_MODULES, type PortalModule } from './navigation/PacienteModuleContext';
 import PacienteSidebar from './components/PacienteSidebar';
-import { NotificationDrawer } from './components/NotificationDrawer';
 
 // Import every sidebar module screen
 import DashboardPacienteScreen from './DashboardPacienteScreen';
 import NuevaConsultaPacienteScreen from './NuevaConsultaPacienteScreen';
 import PacienteCitasScreen from './PacienteCitasScreen';
-import SalaEsperaVirtualPacienteScreen from './SalaEsperaVirtualPacienteScreen';
+import WaitingRoomScreen from './screens/video/WaitingRoom';
 import PacienteChatScreen from './PacienteChatScreen';
+import PacienteAsistenteScreen from './PacienteAsistenteScreen';
 import PacienteRecetasDocumentosScreen from './PacienteRecetasDocumentosScreen';
 import PacientePerfilScreen from './PacientePerfilScreen';
 import PacienteConfiguracionScreen from './PacienteConfiguracionScreen';
@@ -20,8 +20,9 @@ const MODULE_COMPONENTS: Record<PortalModule, React.ComponentType<any>> = {
   DashboardPaciente: DashboardPacienteScreen,
   NuevaConsultaPaciente: NuevaConsultaPacienteScreen,
   PacienteCitas: PacienteCitasScreen,
-  SalaEsperaVirtualPaciente: SalaEsperaVirtualPacienteScreen,
+  WaitingRoom: WaitingRoomScreen,
   PacienteChat: PacienteChatScreen,
+  PacienteAsistente: PacienteAsistenteScreen,
   PacienteRecetasDocumentos: PacienteRecetasDocumentosScreen,
   PacientePerfil: PacientePerfilScreen,
   PacienteConfiguracion: PacienteConfiguracionScreen,
@@ -38,12 +39,16 @@ const PacientePortalInner: React.FC = () => {
   const isDesktopLayout = Platform.OS === 'web' && viewportWidth >= 1024;
   const { isSidebarOpen, toggleSidebar } = usePacienteModule();
 
+  const closeSidebar = React.useCallback(() => {
+    if (isSidebarOpen) toggleSidebar();
+  }, [isSidebarOpen, toggleSidebar]);
+
   return (
     <View style={[styles.container, isDesktopLayout ? styles.containerDesktop : styles.containerMobile]}>
       <PacienteSidebar
         isMobileMenuOpen={isSidebarOpen}
         onToggleMobileMenu={toggleSidebar}
-        onCloseMobileMenu={toggleSidebar}
+        onCloseMobileMenu={closeSidebar}
       />
 
       <View style={styles.modulesContainer}>
@@ -51,8 +56,6 @@ const PacientePortalInner: React.FC = () => {
           <ModuleSlot key={moduleName} moduleName={moduleName} />
         ))}
       </View>
-
-      <NotificationDrawer />
     </View>
   );
 };
@@ -96,7 +99,7 @@ const ModuleVisibility: React.FC<{ moduleName: PortalModule; children: React.Rea
 };
 
 const PacientePortalScreen: React.FC = () => (
-  <PacienteModuleProvider>
+  <PacienteModuleProvider isPortal>
     <PacientePortalInner />
   </PacienteModuleProvider>
 );

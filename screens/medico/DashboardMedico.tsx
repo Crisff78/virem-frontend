@@ -183,18 +183,18 @@ const DashboardMedico: React.FC = () => {
   const { syncProfile } = useMedicoSessionProfile();
   const { fs, rs, wp, hp, select, isDesktop, isTablet, isMobile, typography } = useResponsive();
   const isDesktopLayout = isDesktop;
-  
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [doctorName, setDoctorName] = useState('Doctor');
   const [doctorSpec, setDoctorSpec] = useState('Especialidad no definida');
   const [doctorAvatar, setDoctorAvatar] = useState<ImageSourcePropType>(DefaultAvatar);
-  
+
   const [dashboardData, setDashboardData] = useState<DashboardPayload>(EMPTY_DASHBOARD);
   const [upcomingCitas, setUpcomingCitas] = useState<MedicoUpcomingCita[]>([]);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
   const [openingCitaId, setOpeningCitaId] = useState('');
-  
+
   const lastRefreshRef = useRef(0);
 
   // --- Sub-componentes internos para acceder a styles ---
@@ -219,44 +219,44 @@ const DashboardMedico: React.FC = () => {
       backgroundColor: 'rgba(0,0,0,0.4)',
       zIndex: 90,
     },
-    
-    mobileMenuBar: { 
-      paddingHorizontal: rs(14), 
-      paddingTop: rs(12), 
-      paddingBottom: rs(8), 
-      backgroundColor: colors.bg 
+
+    mobileMenuBar: {
+      paddingHorizontal: rs(14),
+      paddingTop: rs(12),
+      paddingBottom: rs(8),
+      backgroundColor: colors.bg
     },
-    mobileMenuButton: { 
-      alignSelf: 'flex-start', 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      gap: rs(8), 
-      paddingHorizontal: rs(12), 
-      paddingVertical: rs(8), 
-      borderRadius: rs(10), 
-      borderWidth: 1, 
-      borderColor: '#d8e4f0', 
-      backgroundColor: colors.white 
+    mobileMenuButton: {
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: rs(8),
+      paddingHorizontal: rs(12),
+      paddingVertical: rs(8),
+      borderRadius: rs(10),
+      borderWidth: 1,
+      borderColor: '#d8e4f0',
+      backgroundColor: colors.white
     },
     mobileMenuButtonText: { color: colors.dark, fontWeight: '700', fontSize: fs(13) },
 
     sidebar: { backgroundColor: colors.white, justifyContent: 'space-between', zIndex: 100 },
-    sidebarDesktop: { 
-      width: 250, 
-      borderRightWidth: 1, 
-      borderRightColor: '#eef2f7', 
-      padding: rs(16) 
+    sidebarDesktop: {
+      width: 250,
+      borderRightWidth: 1,
+      borderRightColor: '#eef2f7',
+      padding: rs(16)
     },
-    sidebarTablet: { 
-      width: rs(220), 
-      borderRightWidth: 1, 
-      borderRightColor: '#eef2f7', 
-      padding: rs(16) 
+    sidebarTablet: {
+      width: rs(220),
+      borderRightWidth: 1,
+      borderRightColor: '#eef2f7',
+      padding: rs(16)
     },
-    sidebarMobile: { 
+    sidebarMobile: {
       position: 'absolute',
       left: 0, top: 0, bottom: 0,
-      width: '80%', 
+      width: '80%',
       maxWidth: 300,
       padding: rs(18),
       shadowColor: '#000',
@@ -271,13 +271,13 @@ const DashboardMedico: React.FC = () => {
     logoSubtitle: { fontSize: fs(11), fontWeight: '700', color: colors.muted },
 
     userBox: { marginTop: rs(10), alignItems: 'center', paddingVertical: rs(10) },
-    userAvatar: { 
-      width: rs(60), 
-      height: rs(60), 
-      borderRadius: rs(60), 
-      marginBottom: rs(8), 
-      borderWidth: 3, 
-      borderColor: '#f5f7fb' 
+    userAvatar: {
+      width: rs(60),
+      height: rs(60),
+      borderRadius: rs(60),
+      marginBottom: rs(8),
+      borderWidth: 3,
+      borderColor: '#f5f7fb'
     },
     userName: { fontWeight: '800', color: colors.dark, fontSize: fs(13), textAlign: 'center' },
     userPlan: { color: colors.muted, fontSize: fs(10), fontWeight: '700', marginTop: rs(1), textAlign: 'center' },
@@ -285,292 +285,292 @@ const DashboardMedico: React.FC = () => {
     menu: { marginTop: rs(10), gap: rs(6) },
     menuDesktop: { flex: 1 },
     menuMobile: { flexDirection: 'row', flexWrap: 'wrap' },
-    menuItemRow: { 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      gap: rs(12), 
-      paddingVertical: rs(12), 
-      paddingHorizontal: rs(12), 
-      borderRadius: rs(12), 
-      minWidth: rs(140) 
+    menuItemRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: rs(12),
+      paddingVertical: rs(12),
+      paddingHorizontal: rs(12),
+      borderRadius: rs(12),
+      minWidth: rs(140)
     },
-    menuItemActive: { 
-      backgroundColor: 'rgba(19,127,236,0.10)', 
-      borderRightWidth: 3, 
-      borderRightColor: colors.primary 
+    menuItemActive: {
+      backgroundColor: 'rgba(19,127,236,0.10)',
+      borderRightWidth: 3,
+      borderRightColor: colors.primary
     },
     menuText: { fontSize: fs(14), fontWeight: '700', color: colors.muted },
     menuTextActive: { color: colors.primary },
 
-    logoutButton: { 
-      flexDirection: 'row', 
-      gap: rs(10), 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      backgroundColor: colors.brand, 
-      paddingVertical: rs(12), 
-      borderRadius: rs(12) 
+    logoutButton: {
+      flexDirection: 'row',
+      gap: rs(10),
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.brand,
+      paddingVertical: rs(12),
+      borderRadius: rs(12)
     },
     logoutText: { color: '#fff', fontWeight: '800', fontSize: fs(14) },
 
     main: { flex: 1, paddingHorizontal: rs(24), paddingTop: rs(18) },
     mainMobile: { paddingHorizontal: rs(14), paddingTop: rs(12) },
 
-    header: { 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      justifyContent: 'space-between', 
-      gap: rs(12), 
-      marginBottom: rs(10), 
-      flexWrap: 'wrap' 
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: rs(12),
+      marginBottom: rs(10),
+      flexWrap: 'wrap'
     },
-    notifBtn: { 
-      width: rs(44), 
-      height: rs(44), 
-      borderRadius: rs(14), 
-      backgroundColor: '#fff', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      shadowColor: colors.dark, 
-      shadowOpacity: 0.06, 
-      shadowRadius: 10, 
-      shadowOffset: { width: 0, height: 4 }, 
-      elevation: 2 
+    notifBtn: {
+      width: rs(44),
+      height: rs(44),
+      borderRadius: rs(14),
+      backgroundColor: '#fff',
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: colors.dark,
+      shadowOpacity: 0.06,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 2
     },
-    notifDot: { 
-      position: 'absolute', 
-      top: rs(10), 
-      right: rs(10), 
-      width: rs(10), 
-      height: rs(10), 
-      borderRadius: rs(10), 
-      backgroundColor: '#ef4444', 
-      borderWidth: 2, 
-      borderColor: '#fff' 
-    },
-
-    title: { 
-      fontSize: fs(24), 
-      fontWeight: '900', 
-      color: colors.dark, 
-      marginTop: rs(4), 
-      letterSpacing: -0.3 
-    },
-    subtitle: { 
-      fontSize: fs(14), 
-      color: colors.muted, 
-      marginTop: rs(4), 
-      marginBottom: rs(16), 
-      fontWeight: '600', 
-      lineHeight: fs(20) 
+    notifDot: {
+      position: 'absolute',
+      top: rs(10),
+      right: rs(10),
+      width: rs(10),
+      height: rs(10),
+      borderRadius: rs(10),
+      backgroundColor: '#ef4444',
+      borderWidth: 2,
+      borderColor: '#fff'
     },
 
-    bigCard: { 
-      backgroundColor: '#fff', 
-      borderRadius: rs(24), 
-      padding: rs(20), 
-      flexDirection: isDesktop ? 'row' : 'column', 
-      gap: rs(16), 
-      marginBottom: rs(18), 
-      shadowColor: '#1F4770', 
-      shadowOpacity: 0.08, 
-      shadowRadius: 15, 
-      shadowOffset: { width: 0, height: 8 }, 
+    title: {
+      fontSize: fs(24),
+      fontWeight: '900',
+      color: colors.dark,
+      marginTop: rs(4),
+      letterSpacing: -0.3
+    },
+    subtitle: {
+      fontSize: fs(14),
+      color: colors.muted,
+      marginTop: rs(4),
+      marginBottom: rs(16),
+      fontWeight: '600',
+      lineHeight: fs(20)
+    },
+
+    bigCard: {
+      backgroundColor: '#fff',
+      borderRadius: rs(24),
+      padding: rs(20),
+      flexDirection: isDesktop ? 'row' : 'column',
+      gap: rs(16),
+      marginBottom: rs(18),
+      shadowColor: '#1F4770',
+      shadowOpacity: 0.08,
+      shadowRadius: 15,
+      shadowOffset: { width: 0, height: 8 },
       ...Platform.select({
         web: { boxShadow: '0 8px 24px rgba(43,108,176,0.15)' as any },
         default: {}
       }),
-      elevation: 5 
+      elevation: 5
     },
     bigCardLeft: { flex: 1 },
-    bigCardRight: { 
-      width: isDesktop ? rs(160) : '100%', 
-      justifyContent: 'center', 
-      alignItems: 'center' 
+    bigCardRight: {
+      width: isDesktop ? rs(160) : '100%',
+      justifyContent: 'center',
+      alignItems: 'center'
     },
     bigCardImage: { width: rs(130), height: rs(130), borderRadius: rs(20) },
     liveRow: { flexDirection: 'row', alignItems: 'center', gap: rs(8), marginBottom: rs(10) },
     liveDot: { width: rs(10), height: rs(10), borderRadius: rs(10), backgroundColor: '#22c55e' },
-    liveText: { 
-      color: colors.primary, 
-      fontSize: fs(11), 
-      fontWeight: '900', 
-      letterSpacing: 1, 
-      textTransform: 'uppercase' 
+    liveText: {
+      color: colors.primary,
+      fontSize: fs(11),
+      fontWeight: '900',
+      letterSpacing: 1,
+      textTransform: 'uppercase'
     },
     bigCardTitle: { fontSize: fs(18), fontWeight: '900', color: colors.dark, marginBottom: rs(6) },
     bigCardSub: { fontSize: fs(14), color: colors.muted, fontWeight: '700', marginBottom: rs(14) },
     bigCardActions: { flexDirection: 'row', flexWrap: 'wrap', gap: rs(10) },
-    primaryBtn: { 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      gap: rs(8), 
-      backgroundColor: colors.primary, 
-      paddingVertical: rs(12), 
-      paddingHorizontal: rs(16), 
-      borderRadius: rs(16), 
-      shadowColor: colors.primary, 
-      shadowOpacity: 0.3, 
-      shadowRadius: 8, 
-      shadowOffset: { width: 0, height: 4 }, 
-      elevation: 3 
+    primaryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: rs(8),
+      backgroundColor: colors.primary,
+      paddingVertical: rs(12),
+      paddingHorizontal: rs(16),
+      borderRadius: rs(16),
+      shadowColor: colors.primary,
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 3
     },
     primaryBtnText: { color: '#fff', fontWeight: '900', fontSize: fs(14) },
-    secondaryBtn: { 
-      backgroundColor: '#f1f5f9', 
-      paddingVertical: rs(12), 
-      paddingHorizontal: rs(16), 
-      borderRadius: rs(16) 
+    secondaryBtn: {
+      backgroundColor: '#f1f5f9',
+      paddingVertical: rs(12),
+      paddingHorizontal: rs(16),
+      borderRadius: rs(16)
     },
     secondaryBtnText: { color: colors.muted, fontWeight: '900', fontSize: fs(14) },
 
     quickRow: { flexDirection: 'row', gap: rs(10), marginBottom: rs(18) },
-    quickTile: { 
-      flex: 1, 
-      backgroundColor: '#fff', 
-      borderRadius: rs(16), 
-      paddingVertical: rs(14), 
-      paddingHorizontal: rs(10), 
-      alignItems: 'center', 
-      borderWidth: 1, 
-      borderColor: '#eef3fa', 
-      shadowColor: colors.dark, 
-      shadowOpacity: 0.05, 
-      shadowRadius: 8, 
-      shadowOffset: { width: 0, height: 3 }, 
-      elevation: 2 
+    quickTile: {
+      flex: 1,
+      backgroundColor: '#fff',
+      borderRadius: rs(16),
+      paddingVertical: rs(14),
+      paddingHorizontal: rs(10),
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: '#eef3fa',
+      shadowColor: colors.dark,
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 2
     },
-    quickTileIcon: { 
-      width: rs(44), 
-      height: rs(44), 
-      borderRadius: rs(12), 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      marginBottom: rs(8) 
+    quickTileIcon: {
+      width: rs(44),
+      height: rs(44),
+      borderRadius: rs(12),
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: rs(8)
     },
     quickTileLabel: { fontSize: fs(12), fontWeight: '700', color: colors.dark, textAlign: 'center' },
 
-    twoCols: { 
-      flexDirection: isDesktop ? 'row' : 'column', 
-      gap: rs(16), 
-      marginTop: rs(16) 
+    twoCols: {
+      flexDirection: isDesktop ? 'row' : 'column',
+      gap: rs(16),
+      marginTop: rs(16)
     },
     colLeft: { flex: 2 },
     colRight: { flex: 1.2 },
     colLeftFull: { flex: 1 },
     rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 
-    sectionTitle: { 
-      fontSize: fs(16), 
-      fontWeight: '900', 
-      color: colors.dark, 
-      marginBottom: rs(10), 
-      marginTop: rs(10) 
+    sectionTitle: {
+      fontSize: fs(16),
+      fontWeight: '900',
+      color: colors.dark,
+      marginBottom: rs(10),
+      marginTop: rs(10)
     },
     link: { color: colors.primary, fontWeight: '900', fontSize: fs(12) },
 
-    apptCard: { 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      gap: rs(12), 
-      backgroundColor: '#fff', 
-      padding: rs(14), 
-      borderRadius: rs(18), 
-      marginTop: rs(10), 
-      shadowColor: colors.dark, 
-      shadowOpacity: 0.05, 
-      shadowRadius: 10, 
-      shadowOffset: { width: 0, height: 4 }, 
-      elevation: 2 
+    apptCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: rs(12),
+      backgroundColor: '#fff',
+      padding: rs(14),
+      borderRadius: rs(18),
+      marginTop: rs(10),
+      shadowColor: colors.dark,
+      shadowOpacity: 0.05,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 2
     },
     apptAvatar: { width: rs(52), height: rs(52), borderRadius: rs(16) },
     apptDoctor: { fontWeight: '900', color: colors.dark, fontSize: fs(14) },
     apptDetail: { color: colors.muted, fontWeight: '700', marginTop: rs(2), fontSize: fs(12) },
     apptBtns: { flexDirection: 'row', gap: rs(8) },
-    smallBtnGray: { 
-      backgroundColor: '#f1f5f9', 
-      paddingVertical: rs(8), 
-      paddingHorizontal: rs(12), 
-      borderRadius: rs(12) 
+    smallBtnGray: {
+      backgroundColor: '#f1f5f9',
+      paddingVertical: rs(8),
+      paddingHorizontal: rs(12),
+      borderRadius: rs(12)
     },
     smallBtnGrayDisabled: { backgroundColor: '#e2e8f0' },
     smallBtnGrayText: { color: colors.muted, fontWeight: '900', fontSize: fs(12) },
     smallBtnGrayTextDisabled: { color: '#94a3b8' },
-    smallBtnBlue: { 
-      backgroundColor: 'rgba(19,127,236,0.12)', 
-      paddingVertical: rs(8), 
-      paddingHorizontal: rs(12), 
-      borderRadius: rs(12) 
+    smallBtnBlue: {
+      backgroundColor: 'rgba(19,127,236,0.12)',
+      paddingVertical: rs(8),
+      paddingHorizontal: rs(12),
+      borderRadius: rs(12)
     },
     smallBtnBlueText: { color: colors.primary, fontWeight: '900', fontSize: fs(12) },
 
-    docRow: { 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      justifyContent: 'space-between', 
-      paddingVertical: rs(12), 
-      borderBottomWidth: 1, 
-      borderBottomColor: '#eef2f7' 
+    docRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: rs(12),
+      borderBottomWidth: 1,
+      borderBottomColor: '#eef2f7'
     },
     docLeft: { flexDirection: 'row', alignItems: 'center', gap: rs(12), flex: 1 },
-    docIconBox: { 
-      width: rs(40), 
-      height: rs(40), 
-      borderRadius: rs(12), 
-      backgroundColor: '#f4f8fc', 
-      alignItems: 'center', 
-      justifyContent: 'center' 
+    docIconBox: {
+      width: rs(40),
+      height: rs(40),
+      borderRadius: rs(12),
+      backgroundColor: '#f4f8fc',
+      alignItems: 'center',
+      justifyContent: 'center'
     },
     docTitle: { color: colors.dark, fontWeight: '700', fontSize: fs(13) },
     docAvatar: { width: rs(32), height: rs(32), borderRadius: rs(8) },
     docSub: { color: colors.muted, fontSize: fs(11), marginTop: rs(2) },
 
-    emptyCard: { 
-      alignItems: 'center', 
-      padding: rs(24), 
-      backgroundColor: '#fff', 
-      borderRadius: rs(18), 
-      borderWidth: 1, 
-      borderColor: '#eef2f7', 
-      borderStyle: 'dashed', 
-      marginTop: rs(10) 
+    emptyCard: {
+      alignItems: 'center',
+      padding: rs(24),
+      backgroundColor: '#fff',
+      borderRadius: rs(18),
+      borderWidth: 1,
+      borderColor: '#eef2f7',
+      borderStyle: 'dashed',
+      marginTop: rs(10)
     },
     emptyText: { color: colors.muted, fontWeight: '600', marginTop: rs(10), fontSize: fs(14) },
 
     statsContainer: { gap: rs(10), marginTop: rs(10) },
-    statCard: { 
-      backgroundColor: '#fff', 
-      padding: rs(16), 
-      borderRadius: rs(18), 
-      shadowColor: colors.dark, 
-      shadowOpacity: 0.05, 
-      shadowRadius: 10, 
-      shadowOffset: { width: 0, height: 4 }, 
-      elevation: 2 
+    statCard: {
+      backgroundColor: '#fff',
+      padding: rs(16),
+      borderRadius: rs(18),
+      shadowColor: colors.dark,
+      shadowOpacity: 0.05,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 2
     },
-    statTopRow: { 
-      flexDirection: 'row', 
-      justifyContent: 'space-between', 
-      alignItems: 'center', 
-      marginBottom: rs(12) 
+    statTopRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: rs(12)
     },
-    statTitle: { 
-      color: colors.muted, 
-      fontWeight: '700', 
-      fontSize: fs(12), 
-      textTransform: 'uppercase', 
-      letterSpacing: 0.5 
+    statTitle: {
+      color: colors.muted,
+      fontWeight: '700',
+      fontSize: fs(12),
+      textTransform: 'uppercase',
+      letterSpacing: 0.5
     },
     statBottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
     statValue: { fontSize: fs(24), fontWeight: '900', color: colors.dark },
-    trendRow: { 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      gap: rs(4), 
-      backgroundColor: '#f8fafc', 
-      paddingHorizontal: rs(8), 
-      paddingVertical: rs(4), 
-      borderRadius: rs(8) 
+    trendRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: rs(4),
+      backgroundColor: '#f8fafc',
+      paddingHorizontal: rs(8),
+      paddingVertical: rs(4),
+      borderRadius: rs(8)
     },
     trendText: { fontSize: fs(11), fontWeight: '800' },
   }), [fs, rs, isDesktop, colors]);
@@ -583,7 +583,7 @@ const DashboardMedico: React.FC = () => {
     onVideoCall,
     onDetails,
     videoCallDisabled,
-    videoCallLabel = 'Videollamada',
+    videoCallLabel = 'Consulta Virtual',
   }: any) => (
     <View style={styles.apptCard}>
       <ViremImage source={avatar} style={styles.apptAvatar} />
@@ -708,24 +708,24 @@ const DashboardMedico: React.FC = () => {
 
       const nextAgenda: DashboardAgendaItem[] = Array.isArray(dashboard?.agendaHoy)
         ? dashboard.agendaHoy.map((item: any) => ({
-            id: String(item?.id || ''),
-            time: String(item?.time || ''),
-            name: String(item?.name || 'Paciente'),
-            detail: String(item?.detail || 'Consulta programada'),
-            patientId: String(item?.patientId || ''),
-            patientCode: String(item?.patientCode || ''),
-            fechaHoraInicio: item?.fechaHoraInicio || null,
-          }))
+          id: String(item?.id || ''),
+          time: String(item?.time || ''),
+          name: String(item?.name || 'Paciente'),
+          detail: String(item?.detail || 'Consulta programada'),
+          patientId: String(item?.patientId || ''),
+          patientCode: String(item?.patientCode || ''),
+          fechaHoraInicio: item?.fechaHoraInicio || null,
+        }))
         : [];
 
       const nextExpedientes: DashboardExpedienteItem[] = Array.isArray(dashboard?.expedientesRecientes)
         ? dashboard.expedientesRecientes.map((item: any) => ({
-            id: String(item?.id || ''),
-            name: String(item?.name || 'Paciente'),
-            code: String(item?.code || ''),
-            lastSeenText: String(item?.lastSeenText || 'Sin historial'),
-            lastSeenAt: item?.lastSeenAt || null,
-          }))
+          id: String(item?.id || ''),
+          name: String(item?.name || 'Paciente'),
+          code: String(item?.code || ''),
+          lastSeenText: String(item?.lastSeenText || 'Sin historial'),
+          lastSeenAt: item?.lastSeenAt || null,
+        }))
         : [];
 
       setDashboardData({
@@ -827,10 +827,10 @@ const DashboardMedico: React.FC = () => {
   };
 
   const handleVideoCall = async (citaId?: string) => {
-    const targetCita = citaId 
-      ? upcomingCitas.find(c => c.citaid === citaId) 
+    const targetCita = citaId
+      ? upcomingCitas.find(c => c.citaid === citaId)
       : upcomingCitas[0];
-      
+
     if (!targetCita) return;
 
     navigation.navigate('VideoCall', {
@@ -842,7 +842,7 @@ const DashboardMedico: React.FC = () => {
   const nextCita = upcomingCitas[0] || null;
   const bannerPatientName = nextCita ? nextCita.paciente.nombreCompleto : '';
   const bannerPatientAvatar = resolveRemoteImageSource(nextCita?.paciente?.fotoUrl, DefaultAvatar);
-  
+
   const sideItems: SideItem[] = [
     { icon: 'grid-view', label: 'Panel', route: 'DashboardMedico', active: true },
     { icon: 'calendar-today', label: 'Agenda', route: 'MedicoCitas' },
@@ -888,19 +888,19 @@ const DashboardMedico: React.FC = () => {
                     style={[styles.menuItemRow, item.active ? styles.menuItemActive : null]}
                     onPress={() => handleSidebarNavigation(item.route || 'DashboardMedico')}
                   >
-                    <MaterialIcons 
-                      name={item.icon as any} 
-                      size={20} 
-                      color={item.active ? colors.primary : colors.muted} 
+                    <MaterialIcons
+                      name={item.icon as any}
+                      size={20}
+                      color={item.active ? colors.primary : colors.muted}
                     />
                     <Text style={[styles.menuText, item.active ? styles.menuTextActive : null]}>{item.label}</Text>
                     {item.badge && (
-                      <View style={{ 
-                        marginLeft: 'auto', 
-                        backgroundColor: item.badge.color, 
-                        borderRadius: 10, 
-                        paddingHorizontal: 6, 
-                        paddingVertical: 2 
+                      <View style={{
+                        marginLeft: 'auto',
+                        backgroundColor: item.badge.color,
+                        borderRadius: 10,
+                        paddingHorizontal: 6,
+                        paddingVertical: 2
                       }}>
                         <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{item.badge.text}</Text>
                       </View>
@@ -943,17 +943,31 @@ const DashboardMedico: React.FC = () => {
                 {nextCita ? `Teleconsulta con ${bannerPatientName}` : 'Todo bajo control'}
               </Text>
               <Text style={styles.bigCardSub}>
-                {nextCita 
-                  ? `Programada para hoy a las ${formatDateTime(nextCita.fechaHoraInicio)}.` 
+                {nextCita
+                  ? `Programada para hoy a las ${formatDateTime(nextCita.fechaHoraInicio)}.`
                   : 'No tienes consultas virtuales pendientes en este momento.'}
               </Text>
               <View style={styles.bigCardActions}>
-                {nextCita && (
-                  <TouchableOpacity style={styles.primaryBtn} onPress={() => handleVideoCall()}>
-                    <MaterialIcons name="videocam" size={20} color="#fff" />
-                    <Text style={styles.primaryBtnText}>Entrar a consulta</Text>
-                  </TouchableOpacity>
-                )}
+                {nextCita && (() => {
+                  const startMs = nextCita.fechaHoraInicio ? new Date(nextCita.fechaHoraInicio).getTime() : 0;
+                  const diffMin = Number.isFinite(startMs) ? (startMs - Date.now()) / 60000 : Infinity;
+                  const isOpen = diffMin <= 5;
+                  const opensAt = Number.isFinite(startMs) && startMs > 0
+                    ? new Intl.DateTimeFormat('es-DO', { hour: '2-digit', minute: '2-digit' }).format(new Date(startMs))
+                    : '';
+                  return (
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, !isOpen && { opacity: 0.5 }]}
+                      onPress={() => isOpen && handleVideoCall()}
+                      disabled={!isOpen}
+                    >
+                      <MaterialIcons name="videocam" size={20} color="#fff" />
+                      <Text style={styles.primaryBtnText}>
+                        {isOpen ? 'Entrar a Consulta Virtual' : `Sala cerrada (abre a las ${opensAt})`}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })()}
                 <TouchableOpacity style={styles.secondaryBtn} onPress={() => handleSidebarNavigation('MedicoCitas')}>
                   <Text style={styles.secondaryBtnText}>Ver Agenda</Text>
                 </TouchableOpacity>
@@ -967,23 +981,23 @@ const DashboardMedico: React.FC = () => {
           </View>
 
           <View style={styles.quickRow}>
-            <StatPill 
-              title="Citas hoy" 
-              value={String(dashboardData.stats.citasHoy)} 
-              icon="today" 
-              trendText="+2" 
+            <StatPill
+              title="Citas hoy"
+              value={String(dashboardData.stats.citasHoy)}
+              icon="today"
+              trendText="+2"
             />
-            <StatPill 
-              title="Completadas" 
-              value={String(dashboardData.stats.citasCompletadas)} 
-              icon="check-circle" 
-              trendText="85%" 
+            <StatPill
+              title="Completadas"
+              value={String(dashboardData.stats.citasCompletadas)}
+              icon="check-circle"
+              trendText="85%"
             />
-            <StatPill 
-              title="Pacientes Mes" 
-              value={String(dashboardData.stats.nuevosPacientesMes)} 
-              icon="people" 
-              trendText="+12%" 
+            <StatPill
+              title="Pacientes Mes"
+              value={String(dashboardData.stats.nuevosPacientesMes)}
+              icon="people"
+              trendText="+12%"
             />
           </View>
 
@@ -995,20 +1009,27 @@ const DashboardMedico: React.FC = () => {
                   <Text style={styles.link}>Ver todas</Text>
                 </TouchableOpacity>
               </View>
-              
+
               {loadingDashboard ? (
                 <ActivityIndicator color={colors.primary} style={{ marginTop: 20 }} />
               ) : upcomingCitas.length > 0 ? (
-                upcomingCitas.slice(0, 3).map((cita) => (
-                  <AppointmentCard
-                    key={cita.citaid}
-                    patient={cita.paciente.nombreCompleto}
-                    detail={formatDateTime(cita.fechaHoraInicio)}
-                    avatar={resolveRemoteImageSource(cita.paciente.fotoUrl, DefaultAvatar)}
-                    onVideoCall={() => handleVideoCall(cita.citaid)}
-                    onDetails={() => Alert.alert('Detalle', 'Funcionalidad en desarrollo')}
-                  />
-                ))
+                upcomingCitas.slice(0, 3).map((cita) => {
+                  const citaStartMs = cita.fechaHoraInicio ? new Date(cita.fechaHoraInicio).getTime() : 0;
+                  const citaDiffMin = Number.isFinite(citaStartMs) ? (citaStartMs - Date.now()) / 60000 : Infinity;
+                  const citaIsOpen = citaDiffMin <= 5;
+                  return (
+                    <AppointmentCard
+                      key={cita.citaid}
+                      patient={cita.paciente.nombreCompleto}
+                      detail={formatDateTime(cita.fechaHoraInicio)}
+                      avatar={resolveRemoteImageSource(cita.paciente.fotoUrl, DefaultAvatar)}
+                      onVideoCall={() => handleVideoCall(cita.citaid)}
+                      onDetails={() => Alert.alert('Detalle', 'Funcionalidad en desarrollo')}
+                      videoCallDisabled={!citaIsOpen}
+                      videoCallLabel={citaIsOpen ? 'Entrar' : `Abre ${formatRelativeIn(cita.fechaHoraInicio)}`}
+                    />
+                  );
+                })
               ) : (
                 <View style={styles.emptyCard}>
                   <MaterialCommunityIcons name="calendar-blank" size={40} color={colors.muted} />

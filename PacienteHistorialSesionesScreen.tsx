@@ -68,7 +68,7 @@ const colors = {
 const PacienteHistorialSesionesScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { t, tx } = useLanguage();
-  const { isInsidePortal, isSidebarOpen, toggleSidebar } = usePacienteModule();
+  const { isInsidePortal, isSidebarOpen, toggleSidebar, setIsNotificationsOpen } = usePacienteModule();
   const { isDesktop: isDesktopLayout } = useResponsive();
   const { signOut, fullName, planLabel, fotoUrl } = usePatientPortalSession();
   const [sessions, setSessions] = useState<SessionRow[]>([
@@ -167,7 +167,7 @@ const PacienteHistorialSesionesScreen: React.FC = () => {
           <View style={styles.topRight}>
             <TouchableOpacity
               style={styles.notificationBtn}
-              onPress={() => navigation.navigate('PacienteNotificaciones')}
+              onPress={() => setIsNotificationsOpen(true)}
             >
               <MaterialIcons name="notifications" size={20} color={colors.muted} />
               <View style={styles.notificationDot} />

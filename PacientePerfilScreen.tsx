@@ -27,7 +27,7 @@ import { usePatientPortalSession } from './hooks/usePatientPortalSession';
 import type { RootStackParamList } from './navigation/types';
 import { apiClient } from './utils/api';
 import { getApiErrorMessage, isAuthError } from './utils/apiErrors';
-import { resolveRemoteImageSource, sanitizeRemoteImageUrl } from './utils/imageSources';
+import { resolveRemoteImageSource } from './utils/imageSources';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
@@ -139,7 +139,12 @@ const toComparableSqlDate = (rawValue: unknown) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-
+const sanitizeFotoUrl = (value: unknown) => {
+  const clean = normalizeValue(value);
+  if (!clean) return '';
+  if (clean.toLowerCase().startsWith('blob:')) return '';
+  return clean;
+};
 
 const buildPersistentPhotoUri = (asset: ImagePicker.ImagePickerAsset | undefined): string => {
   if (!asset) return '';
@@ -213,7 +218,7 @@ const PacientePerfilScreen: React.FC = () => {
 
   const { t, tx } = useLanguage();
   const navigation = usePortalAwareNavigation();
-  const { isInsidePortal, setNotificationsOpen, isSidebarOpen, toggleSidebar } = usePacienteModule();
+  const { isInsidePortal, isSidebarOpen, toggleSidebar, setIsNotificationsOpen } = usePacienteModule();
   const { isDesktop: isDesktopLayout } = useResponsive();
   const {
     user,
@@ -370,7 +375,7 @@ const PacientePerfilScreen: React.FC = () => {
         return;
       }
 
-      const finalUri = sanitizeRemoteImageUrl(payload?.profile?.fotoUrl || uri);
+      const finalUri = sanitizeFotoUrl(payload?.profile?.fotoUrl || uri);
       const nextUser: User = { ...(user || {}), fotoUrl: uri };
       nextUser.fotoUrl = finalUri;
       await persistSessionUser(nextUser);
@@ -453,7 +458,7 @@ const PacientePerfilScreen: React.FC = () => {
         contactoEmergenciaNombre: normalizeValue(profile.contactoEmergenciaNombre),
         contactoEmergenciaTelefono: normalizeValue(profile.contactoEmergenciaTelefono),
         contactoEmergenciaParentesco: normalizeValue(profile.contactoEmergenciaParentesco),
-        fotoUrl: sanitizeRemoteImageUrl(profile.fotoUrl || user?.fotoUrl),
+        fotoUrl: sanitizeFotoUrl(profile.fotoUrl || user?.fotoUrl),
         recibirEmail: Boolean(profile.recibirEmail),
         recibirSMS: Boolean(profile.recibirSMS),
         compartirHistorial: Boolean(profile.compartirHistorial),
@@ -476,7 +481,7 @@ const PacientePerfilScreen: React.FC = () => {
     }
   };
 
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
   return (
     <View style={[styles.container, !isInsidePortal && isDesktopLayout && { flexDirection: 'row' }]}>
       {!isInsidePortal && (
@@ -506,7 +511,7 @@ const PacientePerfilScreen: React.FC = () => {
           </View>
           <TouchableOpacity
             style={styles.notifBtn}
-            onPress={() => setNotificationsOpen(true)}
+            onPress={() => setIsNotificationsOpen(true)}
           >
             <MaterialIcons name="notifications" size={22} color={colors.dark} />
             <View style={styles.notifDot} />

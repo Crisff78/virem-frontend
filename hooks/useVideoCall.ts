@@ -1,79 +1,60 @@
-import { useCallback, useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../utils/api';
-import { useAuth } from '../providers/AuthProvider';
+import { VideoCallApi, CallState } from './useVideoCall.types';
 
-type VideoRoomInfo = {
-  videoSalaId: string;
-  proveedor: string;
-  roomName: string;
-  joinUrl: string;
-  estado: string;
-  canJoin: boolean;
-  token?: string;
-  liveKitUrl?: string;
-};
-
-export function useVideoCall() {
-  const { token } = useAuth();
-  const [isInCall, setIsInCall] = useState(false);
-  const [roomInfo, setRoomInfo] = useState<VideoRoomInfo | null>(null);
-  const [loading, setLoading] = useState(false);
+export function useVideoCall(citaId: string): VideoCallApi {
+  const [state, setState] = useState<CallState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [durationSec, setDurationSec] = useState(0);
+  const [remainingMs, setRemainingMs] = useState(0);
+  const [jitsiConfig, setJitsiConfig] = useState<any>(null);
 
-  const startCall = useCallback(async (citaId: string, isDoctor: boolean = false) => {
-    setLoading(true);
+  const start = useCallback(async () => {
+    if (state !== 'idle') return;
+    setState('joining');
     setError(null);
+
     try {
-      const endpoint = isDoctor 
-        ? `/api/agenda/me/citas/${citaId}/video-sala/abrir`
-        : `/api/agenda/me/citas/${citaId}/video-sala`;
-      
-      let payload: any;
-      if (isDoctor) {
-        payload = await apiClient.post<any>(endpoint, { authenticated: true });
-      } else {
-        payload = await apiClient.get<any>(endpoint, { authenticated: true });
+      const response = await apiClient.post<any>(`/api/video/me/citas/${citaId}/token`, { body: {}, authenticated: true });
+      if (!response.success || response.provider !== 'jitsi' || !response.jitsi) {
+        throw new Error(response.message || 'Jitsi no disponible');
       }
 
-      if (!payload?.success || !payload?.videoSala) {
-        throw new Error(payload?.message || 'No se pudo obtener la información de la sala.');
-      }
+      setJitsiConfig(response.jitsi);
+      setState('connected');
 
-      const sala = payload.videoSala;
-      if (!sala.canJoin) {
-        throw new Error('Tu médico aún no ha iniciado la videollamada. Por favor, espera un momento.');
-      }
-
-      setRoomInfo({
-        videoSalaId: sala.videoSalaId,
-        proveedor: sala.proveedor || 'livekit',
-        roomName: sala.roomName || sala.room_name,
-        joinUrl: sala.joinUrl,
-        estado: sala.estado,
-        canJoin: sala.canJoin,
-        token: sala.token || sala.joinUrl,
-        liveKitUrl: sala.liveKitUrl,
-      });
-      setIsInCall(true);
     } catch (err: any) {
-      setError(err.message || 'Error al iniciar la videollamada.');
-    } finally {
-      setLoading(false);
+      console.error('[Video Call] Error:', err);
+      setError(err.message || 'No se pudo conectar a la videollamada');
+      setState('idle');
     }
-  }, []);
+  }, [citaId, state]);
 
-  const endCall = useCallback(() => {
-    setIsInCall(false);
-    setRoomInfo(null);
-  }, []);
+  const end = useCallback(async (reason?: string) => {
+    setState('ended');
+    try {
+      await apiClient.post(`/api/video/me/citas/${citaId}/end`, { body: { reason }, authenticated: true });
+    } catch (e) {
+      console.warn('Could not notify backend of call end');
+    }
+  }, [citaId]);
+
+  useEffect(() => {
+    if (state !== 'connected') return;
+    const timer = setInterval(() => {
+      setDurationSec(d => d + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [state]);
 
   return {
-    isInCall,
-    roomInfo,
-    loading,
+    state,
     error,
-    startCall,
-    endCall,
-    setError,
+    durationSec,
+    remainingMs,
+    start,
+    end,
+    provider: 'jitsi',
+    jitsiConfig,
   };
 }

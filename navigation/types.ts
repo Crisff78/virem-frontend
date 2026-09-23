@@ -34,21 +34,21 @@ export type DoctorRouteSnapshot = {
 export type RootStackParamList = {
   Landing: undefined;
   Especialidades: undefined;
-  EspecialidadDetalle: {
-    title: string;
-    description: string;
-    image: string | number;
-    icon: string;
-    detailedInfo?: string;
-    whenToGo?: string[];
-    importance?: string;
+  EspecialidadDetalle: { 
+    title: string; 
+    description: string; 
+    image: any; 
+    icon: string; 
+    detailedInfo?: string; 
+    whenToGo?: string[]; 
+    importance?: string; 
   };
   SeleccionPerfil: undefined;
   Login: { prefillEmail?: string } | undefined;
 
   RecuperarContrasena: undefined;
   VerificarIdentidad: { email: string };
-  VerificarEmail: { email: string; roleId?: number };
+  VerificarEmail: { email: string; roleId?: number; pendingRegistration?: boolean };
   EstablecerNuevaContrasena: { email: string };
 
   RegistroPaciente: undefined;
@@ -62,8 +62,12 @@ export type RootStackParamList = {
     datosPersonales: DatosPersonalesMedico;
   };
 
+  Home: undefined;
+
+  // ✅ NUEVA PANTALLA
   DashboardPaciente: undefined;
   PacienteCitas: undefined;
+  PacienteAsistente: undefined;
   PacienteChat:
     | {
         doctorId?: string;
@@ -78,7 +82,7 @@ export type RootStackParamList = {
   PacienteCambiarContrasena: undefined;
   PacienteHistorialSesiones: undefined;
   NuevaConsultaPaciente: undefined;
-  SalaEsperaVirtualPaciente:
+  WaitingRoom:
     | {
         citaId?: string;
       }
@@ -90,7 +94,7 @@ export type RootStackParamList = {
     doctorSnapshot?: DoctorRouteSnapshot;
   };
   DashboardMedico: undefined;
-  MedicoCitas: undefined;
+  MedicoCitas: { highlightCitaId?: string } | undefined;
   MedicoPacientes: undefined;
   MedicoChat:
     | {
@@ -102,7 +106,17 @@ export type RootStackParamList = {
   MedicoConfiguracion: undefined;
   MedicoHorarios: undefined;
   MedicoFinanzas: undefined;
-  MedicoRecetas: undefined;
+  MedicoRecetas: { 
+    prefill?: {
+      pacienteId: string;
+      pacienteNombre: string;
+      citaId: string;
+    }
+  } | undefined;
+  MedicoPacienteDetalle: {
+    patientId: string;
+    patientName: string;
+  };
   AdminPanel: undefined;
   BlogDetail: {
     category: string;

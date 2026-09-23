@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { sanitizeRemoteImageUrl, resolveRemoteImageSource } from './utils/imageSources';
 import {
   Alert,
   Image,
@@ -12,20 +11,25 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import type { ImageSourcePropType } from 'react-native';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { usePortalAwareMedicoNavigation } from './navigation/usePortalAwareMedicoNavigation';
 import { useMedicoModule } from './navigation/MedicoModuleContext';
 import type { RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MedicoHeader from './components/MedicoHeader';
 import { useMedicoPortalSession } from './hooks/useMedicoPortalSession';
+
 import type { RootStackParamList } from './navigation/types';
 import { useSocketEvent } from './hooks/useSocketEvent';
 import { useSocketRoom } from './hooks/useSocketRoom';
 import { useAuth } from './providers/AuthProvider';
 import { apiClient } from './utils/api';
 
+const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
+
 const MIN_REFRESH_INTERVAL_MS = 12000;
 
 type SessionUser = {
@@ -80,10 +84,11 @@ const formatDateTime = (value: string | null | undefined) => {
 
 const MedicoChatScreen: React.FC = () => {
   const navigation = usePortalAwareMedicoNavigation();
-  const { isInsidePortal } = useMedicoModule();
+  const { isInsidePortal, isSidebarOpen, toggleSidebar } = useMedicoModule();
   const route = useRoute<RouteProp<RootStackParamList, 'MedicoChat'>>();
-  const { user: sessionUser } = useAuth<SessionUser>();
-  const { loadingUser, refreshUser } = useMedicoPortalSession({ syncOnMount: true, addDoctorPrefix: true });
+  const { user: sessionUser, signOut } = useAuth<SessionUser>();
+  const { loadingUser, refreshUser, doctorName, doctorSpec, fotoUrl: doctorFotoUrl } =
+    useMedicoPortalSession({ syncOnMount: true, addDoctorPrefix: true });
   const { width: viewportWidth } = useWindowDimensions();
 
   const [loadingContacts, setLoadingContacts] = useState(false);
@@ -120,6 +125,7 @@ const MedicoChatScreen: React.FC = () => {
         return;
       }
 
+      // El servidor ya devuelve una conversacion por par paciente/medico
       const mapped: ChatContact[] = (payload.conversaciones as any[])
         .map((conv) => {
           const pId = normalizeText(conv?.paciente?.pacienteid);
@@ -226,6 +232,7 @@ const MedicoChatScreen: React.FC = () => {
         setViewMode('chat');
         return;
       }
+      // No existe conversacion aun: la creamos con el endpoint del backend
       let cancelled = false;
       (async () => {
         try {
@@ -248,23 +255,33 @@ const MedicoChatScreen: React.FC = () => {
       };
     }
 
-    if (routePatientName && contacts.length > 0) {
+    if (!contacts.length) {
+      setSelectedChatId('');
+      return;
+    }
+
+    if (routePatientName) {
       const byName = contacts.find(
         (c) => normalizeText(c.name).toLowerCase() === routePatientName.toLowerCase()
       );
       if (byName) {
         setSelectedChatId(byName.id);
-        setViewMode('chat');
         return;
       }
     }
 
-    if (!contacts.some((c) => c.id === selectedChatId)) {
-      if (isDesktopLayout && contacts.length > 0) {
-        setSelectedChatId(contacts[0].id);
-      }
+    const exists = contacts.some((c) => c.id === selectedChatId);
+    if (!exists && contacts.length > 0) {
+      if (viewMode === 'chat') setViewMode('list');
     }
-  }, [contacts, route.params?.patientId, route.params?.patientName, selectedChatId, isDesktopLayout]);
+  }, [
+    contacts,
+    loadContacts,
+    route.params?.patientId,
+    route.params?.patientName,
+    selectedChatId,
+    viewMode,
+  ]);
 
   useEffect(() => {
     if (!selectedChatId) return;
@@ -280,6 +297,7 @@ const MedicoChatScreen: React.FC = () => {
       if (current.some((message) => message.id === nextMessage.id)) {
         return prev;
       }
+
       return {
         ...prev,
         [cleanConversationId]: [...current, nextMessage],
@@ -381,7 +399,7 @@ const MedicoChatScreen: React.FC = () => {
   if (loadingUser) {
     return (
       <View style={styles.loaderWrap}>
-        <Text style={styles.loadingText}>Cargando chat médico...</Text>
+        <Text style={styles.loadingText}>Cargando chat medico...</Text>
       </View>
     );
   }
@@ -410,7 +428,7 @@ const MedicoChatScreen: React.FC = () => {
               <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
                 {loadingContacts ? <Text style={styles.loadingText}>Cargando pacientes...</Text> : null}
                 {!loadingContacts && !filteredContacts.length ? (
-                  <Text style={styles.loadingText}>No tienes pacientes para chat aún.</Text>
+                  <Text style={styles.loadingText}>No tienes pacientes para chat aun.</Text>
                 ) : null}
                 {filteredContacts.map((chat) => {
                   const active = chat.id === selectedChatId;
@@ -450,10 +468,10 @@ const MedicoChatScreen: React.FC = () => {
                       </TouchableOpacity>
                     )}
                     <Image source={DefaultAvatar} style={styles.chatHeaderAvatar} />
-                    <View style={{ flex: 1 }}>
+                    <View>
                       <Text style={styles.chatHeaderName}>{selectedContact.name}</Text>
-                      <Text style={styles.chatHeaderSub} numberOfLines={1}>
-                        Última referencia: {selectedContact.status} · {selectedContact.timeLabel}
+                      <Text style={styles.chatHeaderSub}>
+                        Ultima referencia: {selectedContact.status} · {selectedContact.timeLabel}
                       </Text>
                     </View>
                   </View>
@@ -472,7 +490,7 @@ const MedicoChatScreen: React.FC = () => {
                       <Text style={styles.emptyConversation}>Cargando mensajes...</Text>
                     ) : !currentMessages.length ? (
                       <Text style={styles.emptyConversation}>
-                        Inicia la conversación con {selectedContact.name}.
+                        Inicia la conversacion con {selectedContact.name}.
                       </Text>
                     ) : (
                       currentMessages.map((message) => (
@@ -552,11 +570,22 @@ const colors = {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
-  loaderWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
+  container: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  loaderWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bg,
+  },
   loadingText: { color: colors.muted, fontSize: 13, fontWeight: '700' },
   main: { flex: 1, paddingHorizontal: 20 },
-  headerWrap: { paddingTop: Platform.OS === 'web' ? 32 : 14, paddingBottom: 12 },
+  headerWrap: {
+    paddingTop: Platform.OS === 'web' ? 32 : 14,
+    paddingBottom: 12,
+  },
   chatShell: {
     flex: 1,
     marginBottom: 20,
@@ -567,16 +596,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     flexDirection: Platform.OS === 'web' ? 'row' : 'column',
   },
-  chatShellMobile: { flexDirection: 'column' },
+  chatShellMobile: {
+    flexDirection: 'column',
+  },
   contactsPane: {
     width: Platform.OS === 'web' ? 320 : '100%',
     flex: 1,
     borderRightWidth: Platform.OS === 'web' ? 1 : 0,
+    borderBottomWidth: Platform.OS === 'web' ? 0 : 1,
     borderRightColor: '#e4edf7',
+    borderBottomColor: '#e4edf7',
     padding: 12,
     backgroundColor: '#f8fbff',
   },
-  contactsPaneMobile: { width: '100%', borderRightWidth: 0, flex: 1 },
+  contactsPaneMobile: {
+    width: '100%',
+    borderRightWidth: 0,
+    borderBottomWidth: 1,
+  },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -614,18 +651,19 @@ const styles = StyleSheet.create({
   chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#dfeaf7',
-    paddingBottom: 12,
-    backgroundColor: 'transparent',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#dfeaf7',
+    borderRadius: 10,
+    padding: 10,
+    backgroundColor: '#fff',
   },
   chatHeaderAvatar: { width: 42, height: 42, borderRadius: 42 },
-  chatHeaderName: { color: colors.dark, fontSize: 16, fontWeight: '900' },
-  chatHeaderSub: { color: colors.muted, fontSize: 12, fontWeight: '700', marginTop: 1 },
-  messagesList: { flex: 1, paddingHorizontal: 10, paddingTop: 10 },
-  emptyConversation: { color: colors.muted, fontSize: 13, fontWeight: '700', marginTop: 8, textAlign: 'center' },
-  msgWrap: { maxWidth: '85%', marginBottom: 8, alignSelf: 'flex-start' },
+  chatHeaderName: { color: colors.dark, fontSize: 15, fontWeight: '900' },
+  chatHeaderSub: { color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: '600' },
+  messagesList: { flex: 1, marginTop: 10 },
+  emptyConversation: { color: colors.muted, fontSize: 13, fontWeight: '700', marginTop: 8 },
+  msgWrap: { maxWidth: '85%', marginBottom: 6, alignSelf: 'flex-start' },
   msgWrapMe: { alignSelf: 'flex-end', alignItems: 'flex-end' },
   msgBubble: { 
     backgroundColor: colors.bubbleOther, 
@@ -697,7 +735,10 @@ const styles = StyleSheet.create({
   typingDot2: { opacity: 0.7 },
   typingDot3: { opacity: 0.9 },
   typingText: { fontSize: 11, fontWeight: '700', color: colors.muted, fontStyle: 'italic' },
-  backBtn: { padding: 4, marginRight: 6 },
+  backBtn: {
+    padding: 4,
+    marginRight: 6,
+  },
   emptyChatState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
 });
 

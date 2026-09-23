@@ -1,7 +1,8 @@
 import { useWindowDimensions } from 'react-native';
 import { contentMaxWidth, horizontalPadding } from '../theme/spacing';
 
-const BASE_WIDTH = 390; // iPhone 14 Pro
+// iPhone 14 Pro es la referencia de diseño base
+const BASE_WIDTH = 390;
 
 export const BREAKPOINTS = {
   smallPhone: 360,
@@ -14,92 +15,78 @@ export const BREAKPOINTS = {
 export const useResponsive = () => {
   const { width, height } = useWindowDimensions();
 
-  const isSmallMobile = width < BREAKPOINTS.smallPhone;
-  const isMobile = width < BREAKPOINTS.tablet;
-  const isTablet = width >= BREAKPOINTS.tablet && width < BREAKPOINTS.desktop;
+  const isMobile  = width < BREAKPOINTS.tablet;
+  const isTablet  = width >= BREAKPOINTS.tablet && width < BREAKPOINTS.desktop;
   const isDesktop = width >= BREAKPOINTS.desktop;
+
+  const isSmallMobile  = width < BREAKPOINTS.smallPhone;
   const isLargeDesktop = width >= BREAKPOINTS.wide;
   const isPhone = isMobile;
   const isLandscape = width > height;
 
-  /**
-   * fs: font scale conservador.
-   * Garantiza min 75% (phones pequeños), max 1.6 móvil / 1.1 desktop.
-   */
+  // Escala tipografía relativa al ancho de pantalla.
+  // Clamp: mínimo 75% (phones pequeños), máximo 160% (tablets grandes).
   const fs = (size: number): number => {
-    const maxScale = isDesktop ? 1.1 : 1.6;
-    const scale = Math.min(Math.max(width / BASE_WIDTH, 0.75), maxScale);
+    const scale = Math.min(Math.max(width / BASE_WIDTH, 0.75), 1.15);
     return Math.round(size * scale);
   };
 
-  /**
-   * rs: spacing scale (más conservador que fs).
-   */
+  // Escala espaciado y dimensiones (rango más conservador que fs).
   const rs = (size: number): number => {
-    const maxScale = isDesktop ? 1.05 : 1.4;
-    const scale = Math.min(Math.max(width / BASE_WIDTH, 0.8), maxScale);
+    const scale = Math.min(Math.max(width / BASE_WIDTH, 0.8), 1.1);
     return Math.round(size * scale);
   };
 
-  const wp = (percent: number): number => (width * percent) / 100;
+  // Porcentaje del ancho/alto de pantalla
+  const wp = (percent: number): number => (width  * percent) / 100;
   const hp = (percent: number): number => (height * percent) / 100;
 
-  /**
-   * Clamp escalado: nunca excede min/max sin importar el dispositivo.
-   */
-  const clamp = (value: number, min: number, max: number): number => {
-    const scaled = rs(value);
-    return Math.min(Math.max(scaled, min), max);
-  };
-
-  /**
-   * Escala tipográfica semántica lista para StyleSheet.
-   */
+  // Escala semántica de tipografía lista para usar en StyleSheet
   const typography = {
-    xs: fs(10),
-    sm: fs(12),
-    base: fs(14),
-    md: fs(16),
-    lg: fs(18),
-    xl: fs(22),
+    xs:    fs(10),
+    sm:    fs(12),
+    base:  fs(14),
+    lg:    fs(16),
+    xl:    fs(18),
     '2xl': fs(22),
     '3xl': fs(28),
     '4xl': fs(34),
   };
 
-  /**
-   * select: helper para variar valores por breakpoint.
-   */
-  const select = <TMobile, TTablet = TMobile, TDesktop = TMobile>(options: {
-    mobile: TMobile;
-    tablet?: TTablet;
-    desktop?: TDesktop;
-  }): TMobile | TTablet | TDesktop => {
+  // Helper para elegir valor según breakpoint
+  const select = <TMobile, TTablet = TMobile, TDesktop = TMobile>(
+    options: { mobile: TMobile; tablet?: TTablet; desktop?: TDesktop }
+  ): TMobile | TTablet | TDesktop => {
     if (isDesktop && options.desktop !== undefined) return options.desktop;
     if ((isTablet || isDesktop) && options.tablet !== undefined) return options.tablet;
     return options.mobile;
   };
 
+  // Clamped spacing: never outside min/max whatever the device.
+  const clamp = (value: number, min: number, max: number): number =>
+    Math.min(Math.max(rs(value), min), max);
+
+  // Layout values shared with ResponsiveContainer.
   const paddingH = horizontalPadding(width);
   const maxContent = contentMaxWidth(width);
 
   return {
     width,
     height,
-    isSmallMobile,
     isMobile,
     isTablet,
     isDesktop,
+    isSmallMobile,
     isLargeDesktop,
-    isPhone,
-    isLandscape,
     fs,
     rs,
     wp,
     hp,
-    clamp,
     typography,
     select,
+    isPhone,
+    isLandscape,
+    clamp,
     paddingH,
     maxContent,
   };

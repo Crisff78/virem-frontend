@@ -18,6 +18,7 @@ export const MEDICO_PORTAL_MODULES = [
   'MedicoRecetas',
   'MedicoFinanzas',
   'MedicoConfiguracion',
+  'MedicoConsultaVirtual',
 ] as const;
 
 export type MedicoPortalModule = (typeof MEDICO_PORTAL_MODULES)[number];
@@ -27,13 +28,15 @@ type MedicoModuleContextValue = {
   isInsidePortal: boolean;
   /** Currently visible sidebar module */
   activeModule: MedicoPortalModule;
+  /** Params for the active module */
+  activeModuleParams: Record<string, any> | undefined;
   /** Switch to a different sidebar module (no unmount/remount) */
-  setActiveModule: (module: MedicoPortalModule) => void;
+  setActiveModule: (module: MedicoPortalModule, params?: Record<string, any>) => void;
   /**
    * Navigate: if the target is a sidebar module, switch without unmounting.
    * Otherwise, push onto the stack as usual.
    */
-  portalNavigate: (route: string, params?: Record<string, unknown>) => void;
+  portalNavigate: (route: string, params?: Record<string, any>) => void;
   /** Global sidebar toggle state (Desktop & Mobile) */
   isSidebarOpen: boolean;
   toggleSidebar: () => void;
@@ -45,6 +48,7 @@ type MedicoModuleContextValue = {
 const fallbackCtx: MedicoModuleContextValue = {
   isInsidePortal: false,
   activeModule: 'DashboardMedico',
+  activeModuleParams: undefined,
   setActiveModule: () => undefined,
   portalNavigate: () => undefined,
   isSidebarOpen: true,
@@ -76,6 +80,7 @@ export const MedicoModuleProvider: React.FC<ProviderProps> = ({
   children,
 }) => {
   const [activeModule, setActiveModuleRaw] = useState<MedicoPortalModule>(initialModule);
+  const [activeModuleParams, setActiveModuleParams] = useState<Record<string, any> | undefined>(undefined);
   
   // Initial state: closed on mobile devices or small screens, open on desktop web
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
@@ -90,14 +95,16 @@ export const MedicoModuleProvider: React.FC<ProviderProps> = ({
 
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  const setActiveModule = useCallback((mod: MedicoPortalModule) => {
+  const setActiveModule = useCallback((mod: MedicoPortalModule, params?: Record<string, any>) => {
     setActiveModuleRaw(mod);
+    setActiveModuleParams(params);
   }, []);
 
   const portalNavigate = useCallback(
-    (route: string, params?: Record<string, unknown>) => {
+    (route: string, params?: Record<string, any>) => {
       if (isMedicoPortalModule(route)) {
         setActiveModuleRaw(route);
+        setActiveModuleParams(params);
         // On mobile/tablet, close sidebar after navigating
         if (Platform.OS !== 'web' || (typeof window !== 'undefined' && window.innerWidth < 1024)) {
           setIsSidebarOpen(false);
@@ -123,6 +130,7 @@ export const MedicoModuleProvider: React.FC<ProviderProps> = ({
     () => ({
       isInsidePortal: true,
       activeModule,
+      activeModuleParams,
       setActiveModule,
       portalNavigate,
       isSidebarOpen,
@@ -130,7 +138,7 @@ export const MedicoModuleProvider: React.FC<ProviderProps> = ({
       isNotificationOpen,
       toggleNotification,
     }),
-    [activeModule, portalNavigate, setActiveModule, isSidebarOpen, toggleSidebar, isNotificationOpen, toggleNotification]
+    [activeModule, activeModuleParams, portalNavigate, setActiveModule, isSidebarOpen, toggleSidebar, isNotificationOpen, toggleNotification]
   );
 
   return (

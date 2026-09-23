@@ -5,7 +5,6 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './navigation/types';
 import { useResponsive } from './hooks/useResponsive';
-import { shadow, textShadow } from './utils/styles';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'EspecialidadDetalle'>;
 type Route = RouteProp<RootStackParamList, 'EspecialidadDetalle'>;
@@ -251,10 +250,10 @@ const styles = StyleSheet.create({
   heroImage: { width: '100%', height: '100%' },
   imageOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)' },
   titleContainer: { position: 'absolute', alignItems: 'flex-start' },
-  iconBadge: { borderRadius: 18, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', ...shadow('#000', 0.3, 10, { width: 0, height: 2 }, 5) },
-  heroTitle: { fontWeight: '900', color: '#fff', ...textShadow('rgba(0,0,0,0.4)', { width: 0, height: 2 }, 10), letterSpacing: -0.5 },
+  iconBadge: { borderRadius: 18, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, elevation: 5 },
+  heroTitle: { fontWeight: '900', color: '#fff', textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 10, letterSpacing: -0.5 },
   contentWrapper: { paddingHorizontal: 20, maxWidth: 1000, alignSelf: 'center', width: '100%', zIndex: 10 },
-  infoCard: { backgroundColor: '#fff', borderRadius: 32, ...shadow('#000', 0.08, 30, { width: 0, height: 4 }, 10), borderWidth: 1, borderColor: 'rgba(226, 232, 240, 0.5)' },
+  infoCard: { backgroundColor: '#fff', borderRadius: 32, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 30, elevation: 10, borderWidth: 1, borderColor: 'rgba(226, 232, 240, 0.5)' },
   section: { marginBottom: 40 },
   sectionHeading: { fontSize: 22, fontWeight: '900', color: colors.secondary, marginBottom: 16, letterSpacing: -0.5 },
   bodyText: { fontSize: 16, color: colors.dark, lineHeight: 26, fontWeight: '500', opacity: 0.9 },
@@ -265,17 +264,17 @@ const styles = StyleSheet.create({
   importanceBox: { backgroundColor: '#F8FAFC', padding: 30, borderRadius: 24, borderLeftWidth: 6, borderLeftColor: colors.primary, marginBottom: 20 },
   importanceHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   divider: { height: 1, backgroundColor: '#E2E8F0', marginVertical: 20, width: '100%' },
-  actionBtn: { backgroundColor: colors.primary, padding: 20, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, ...shadow(colors.primary, 0.25, 15, { width: 0, height: 4 }, 8), marginTop: 10 },
+  actionBtn: { backgroundColor: colors.primary, padding: 20, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, shadowColor: colors.primary, shadowOpacity: 0.25, shadowRadius: 15, elevation: 8, marginTop: 10 },
   actionBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.85)', justifyContent: 'center', alignItems: 'center', padding: 20, zIndex: 1000 },
   modalBlurClose: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  modalContent: { width: '100%', maxWidth: 420, backgroundColor: '#fff', borderRadius: 32, padding: 35, alignItems: 'center', ...shadow('#000', 0.3, 20, { width: 0, height: 4 }, 20) },
+  modalContent: { width: '100%', maxWidth: 420, backgroundColor: '#fff', borderRadius: 32, padding: 35, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 20, elevation: 20 },
   modalIconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#F0F9FF', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 24, fontWeight: '900', color: colors.secondary, marginBottom: 10 },
   modalMessage: { fontSize: 16, color: colors.muted, textAlign: 'center', lineHeight: 24, marginBottom: 30 },
   modalButtonContainer: { width: '100%', gap: 12 },
   modalBtn: { width: '100%', padding: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  modalBtnPrimary: { backgroundColor: colors.primary, ...shadow(colors.primary, 0.3, 10, { width: 0, height: 4 }, 5) },
+  modalBtnPrimary: { backgroundColor: colors.primary, shadowColor: colors.primary, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5 },
   modalBtnSecondary: { backgroundColor: '#fff', borderWidth: 2, borderColor: '#E2E8F0' },
   modalBtnTextPrimary: { color: '#fff', fontSize: 15, fontWeight: '800' },
   modalBtnTextSecondary: { color: colors.secondary, fontSize: 14, fontWeight: '700' },

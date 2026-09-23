@@ -17,23 +17,51 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bitcode": false
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/imagenes/descarga.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": [
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH"
+      ],
+      "package": "com.anonymous.virem"
     },
     "web": {
       "favicon": "./assets/imagenes/descarga.png",
       "bundler": "metro"
     },
     "plugins": [
+      ["expo-audio", {"microphonePermission": "Virem usa el micrófono cuando eliges dictar una pregunta.", "enableBackgroundRecording": false}],
       "expo-font",
       "expo-router",
       "expo-secure-store",
-      "@livekit/react-native-expo-plugin"
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "appleTeamId": "YOUR_TEAM_ID",
+          "cameraPermission": "VIREM necesita acceso a la cámara para las videollamadas.",
+          "microphonePermission": "VIREM necesita acceso al micrófono para las videollamadas."
+        }
+      ]
     ]
   }
 }

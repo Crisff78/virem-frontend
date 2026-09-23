@@ -1,3 +1,4 @@
+import { apiClient } from './utils/api';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -19,6 +20,18 @@ import {
 import { useResponsive } from './hooks/useResponsive';
 import { RootStackParamList } from './navigation/types';
 import { apiUrl } from './config/backend';
+import BackToLandingButton from './components/BackToLandingButton';
+
+// Alert.alert no se muestra en web (React Native Web): usamos window.alert ahí
+// para que los mensajes sean siempre visibles.
+function showAlert(title: string, message: string) {
+  if (Platform.OS === 'web') {
+    // @ts-ignore
+    window.alert(`${title}\n\n${message}`);
+  } else {
+    Alert.alert(title, message);
+  }
+}
 
 // Tipado navegación
 type NavigationProps = NativeStackNavigationProp<RootStackParamList, 'RegistroPaciente'>;
@@ -156,7 +169,7 @@ const postValidarTelefono = async (
   phoneFormatted: string
 ) => {
   const digits = phoneFormatted.replace(/\D/g, '');
-  return fetch(apiUrl(endpoint), {
+  return apiClient.fetch(apiUrl(endpoint), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ countryCode, phone: digits }),
@@ -209,6 +222,8 @@ const styles = StyleSheet.create({
   headerContent: { maxWidth: 1200, width: '100%', alignSelf: 'center', paddingHorizontal: 16, height: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerContentWide: { paddingHorizontal: 24 },
   logoGroup: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerLeftGroup: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
+  headerBackBtn: { backgroundColor: 'transparent', paddingHorizontal: 4 },
   logoImage: { width: 40, height: 40, resizeMode: 'contain' },
   logoText: { color: colors.navyDark, fontSize: 18, fontWeight: 'bold', lineHeight: 20 },
   logoSubtitle: { color: colors.blueGray, fontSize: 10, fontWeight: '500' },
@@ -282,7 +297,6 @@ const RegistroPacienteScreen: React.FC = () => {
     lastNames.trim() !== '' &&
     birthDate.trim() !== '' &&
     gender !== '' &&
-    cedula.trim() !== '' &&
     phone.trim() !== '';
 
   const handleContinue = async () => {
@@ -293,23 +307,23 @@ const RegistroPacienteScreen: React.FC = () => {
     setTelefonoError('');
 
     if (!isFormComplete) {
-      Alert.alert('Acción Requerida', 'Debe completar todos los datos personales.');
+      showAlert('Acción Requerida', 'Debe completar los campos obligatorios (Nombres, Apellidos, Género, Teléfono y Fecha de Nacimiento).');
       return;
     }
 
     if (!esFechaValida(birthDate)) {
       setFechaError(true);
-      Alert.alert('Fecha Inválida', 'La fecha de nacimiento no es real o es incorrecta.');
+      showAlert('Fecha Inválida', 'La fecha de nacimiento no es real o es incorrecta.');
       return;
     }
 
     if (!esMayorDe18(birthDate)) {
       setFechaMayor18Error(true);
-      Alert.alert('Edad no permitida', 'El paciente debe ser mayor de 18 años.');
+      showAlert('Edad no permitida', 'El paciente debe ser mayor de 18 años.');
       return;
     }
 
-    if (selectedCountryCode.name === 'República Dominicana') {
+    if (cedula.trim() !== '' && selectedCountryCode.name === 'República Dominicana') {
       setIsLoading(true);
       await new Promise((r) => setTimeout(r, 300));
       const ok = validarCedulaDominicana(cedula);
@@ -317,7 +331,7 @@ const RegistroPacienteScreen: React.FC = () => {
 
       if (!ok) {
         setCedulaError(true);
-        Alert.alert('Cédula Inválida', 'El número de cédula no es válido.');
+        showAlert('Cédula Inválida', 'El número de cédula no es válido.');
         return;
       }
     }
@@ -329,7 +343,7 @@ const RegistroPacienteScreen: React.FC = () => {
     // ✅ FIX TS: narrowing correcto
     if (tel.ok === false) {
       setTelefonoError(tel.reason);
-      Alert.alert('Teléfono inválido', tel.reason);
+      showAlert('Teléfono inválido', tel.reason);
       return;
     }
 
@@ -347,19 +361,27 @@ const RegistroPacienteScreen: React.FC = () => {
 
   const handleCancel = () => navigation.navigate('SeleccionPerfil');
 
-  const completedFields = [names, lastNames, birthDate, gender, cedula, phone].filter((x) => x.trim() !== '').length;
-  const progressPercent = Math.round((completedFields / 6) * 100);
+  const completedFields = [names, lastNames, birthDate, gender, phone].filter((x) => x.trim() !== '').length;
+  const progressPercent = Math.round((completedFields / 5) * 100);
 
   return (
     <View style={styles.mainWrapper}>
       <View style={styles.header}>
         <View style={[styles.headerContent, isWideLayout && styles.headerContentWide]}>
-          <View style={styles.logoGroup}>
-            <Image source={ViremLogo} style={styles.logoImage} />
-            <View>
-              <Text style={styles.logoText}>VIREM</Text>
-              <Text style={styles.logoSubtitle}>Gestión Médica</Text>
-            </View>
+          <View style={styles.headerLeftGroup}>
+            <BackToLandingButton label="Volver" color={colors.navyDark} style={styles.headerBackBtn} />
+            <TouchableOpacity
+              style={styles.logoGroup}
+              onPress={() => navigation.navigate('Landing')}
+              accessibilityRole="button"
+              accessibilityLabel="Ir al inicio"
+            >
+              <Image source={ViremLogo} style={styles.logoImage} />
+              <View>
+                <Text style={styles.logoText}>VIREM</Text>
+                <Text style={styles.logoSubtitle}>Gestión Médica</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -421,9 +443,9 @@ const RegistroPacienteScreen: React.FC = () => {
 
               <View style={[styles.formRow, isWideLayout && styles.formRowWide]}>
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.inputLabel}>Cédula (Identificación)</Text>
+                  <Text style={styles.inputLabel}>Cédula (Opcional)</Text>
                   <TextInput
-                    style={[styles.inputField, ((showErrors && !cedula) || cedulaError) && styles.inputError]}
+                    style={[styles.inputField, cedulaError && styles.inputError]}
                     placeholder="XXX-XXXXXXX-X"
                     keyboardType="numeric"
                     value={cedula}

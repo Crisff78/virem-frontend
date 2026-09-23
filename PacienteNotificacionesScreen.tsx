@@ -1,3 +1,4 @@
+import { apiClient } from './utils/api';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -176,7 +177,7 @@ const mapNotification = (item: AgendaNotification): NotificationItem => {
 const PacienteNotificacionesScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { t } = useLanguage();
-  const { isInsidePortal, isSidebarOpen, toggleSidebar } = usePacienteModule();
+  const { isInsidePortal, isSidebarOpen, toggleSidebar, setIsNotificationsOpen } = usePacienteModule();
   const { signOut } = useAuth();
   const { isDesktop: isDesktopLayout } = useResponsive();
   const [user, setUser] = useState<User | null>(null);
@@ -208,7 +209,7 @@ const PacienteNotificacionesScreen: React.FC = () => {
 
       const token = await getAuthToken();
       if (token) {
-        const profileResponse = await fetch(apiUrl('/api/users/me/paciente-profile'), {
+        const profileResponse = await apiClient.fetch(apiUrl('/api/users/me/paciente-profile'), {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -242,7 +243,7 @@ const PacienteNotificacionesScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl('/api/agenda/me/notificaciones?limit=120'), {
+      const response = await apiClient.fetch(apiUrl('/api/agenda/me/notificaciones?limit=120'), {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -357,7 +358,7 @@ const PacienteNotificacionesScreen: React.FC = () => {
       const token = await getAuthToken();
       if (!token) return;
 
-      const response = await fetch(apiUrl('/api/agenda/me/notificaciones/leer-todas'), {
+      const response = await apiClient.fetch(apiUrl('/api/agenda/me/notificaciones/leer-todas'), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -381,7 +382,7 @@ const PacienteNotificacionesScreen: React.FC = () => {
       const token = await getAuthToken();
       if (!token) return;
 
-      const response = await fetch(apiUrl(`/api/agenda/me/notificaciones/${item.id}/leida`), {
+      const response = await apiClient.fetch(apiUrl(`/api/agenda/me/notificaciones/${item.id}/leida`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -460,6 +461,13 @@ const PacienteNotificacionesScreen: React.FC = () => {
             <TouchableOpacity style={styles.markAllBtn} onPress={markAllRead}>
               <MaterialIcons name="done-all" size={16} color="#fff" />
               <Text style={styles.markAllBtnText}>{t('notif.markAllRead')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={() => setIsNotificationsOpen(true)}
+            >
+              <MaterialIcons name="notifications" size={20} color={colors.primary} />
             </TouchableOpacity>
 
             <TouchableOpacity

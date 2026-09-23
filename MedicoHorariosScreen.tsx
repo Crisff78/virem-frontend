@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Platform, ScrollView, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Platform, ScrollView, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useMedicoModule } from './navigation/MedicoModuleContext';
 import { usePortalAwareMedicoNavigation } from './navigation/usePortalAwareMedicoNavigation';
 import { useWindowDimensions } from 'react-native';
 import { useMedicoPortalSession } from './hooks/useMedicoPortalSession';
 import MedicoHeader from './components/MedicoHeader';
+import FeedbackBanner, { type FeedbackState } from './components/FeedbackBanner';
 import { apiClient } from './utils/api';
 
 const colors = {
@@ -71,72 +72,124 @@ const MedicoHorariosScreen: React.FC = () => {
     { dayOfWeek: 0, active: false, start: "08:00", end: "12:00" },
   ]);
   const [generating, setGenerating] = useState(false);
+  const [feedback, setFeedback] = useState<FeedbackState>(null);
+
+  // Auto-calculate horaFin based on horaInicio and slot duration
+  useEffect(() => {
+    if (horaInicio && slot && /^\d{2}:\d{2}$/.test(horaInicio)) {
+      const duration = parseInt(slot, 10);
+      if (!isNaN(duration) && duration > 0) {
+        const [h, m] = horaInicio.split(':').map(Number);
+        const date = new Date();
+        date.setHours(h, m + duration, 0, 0);
+        const eh = String(date.getHours()).padStart(2, '0');
+        const em = String(date.getMinutes()).padStart(2, '0');
+        setHoraFin(`${eh}:${em}`);
+      }
+    }
+  }, [horaInicio, slot]);
 
   const handleAgregar = async () => {
+    setFeedback(null);
     if (!fecha || !horaInicio || !horaFin) {
-      Alert.alert("Error", "Debes ingresar fecha, hora de inicio y hora de fin.");
+      setFeedback({ kind: 'error', message: 'Debes ingresar fecha, hora de inicio y hora de fin.' });
       return;
     }
-    
-    try {
-      setGuardando(true);
-      // Validar formato simple YYYY-MM-DD
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
-        throw new Error("Formato de fecha inválido (YYYY-MM-DD)");
-      }
 
-      const isoInicio = new Date(`${fecha}T${horaInicio}:00`).toISOString();
-      const isoFin = new Date(`${fecha}T${horaFin}:00`).toISOString();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      setFeedback({ kind: 'error', message: 'Formato de fecha inválido. Usa YYYY-MM-DD (ej: 2026-05-07).' });
+      return;
+    }
+    const padTime = (t: string) => {
+      if (/^\d:\d{2}$/.test(t)) return "0" + t;
+      return t;
+    };
+    const start = padTime(horaInicio);
+    const end = padTime(horaFin);
+
+    if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) {
+      setFeedback({ kind: 'error', message: 'Formato de hora inválido. Usa HH:MM (ej: 08:00 o 8:00).' });
+      return;
+    }
+
+    setGuardando(true);
+    try {
+      const bodyData = {
+        fecha,
+        horaInicio: start,
+        horaFin: end,
+        modalidad,
+        slotMinutos: parseInt(slot, 10) || 30,
+      };
 
       const payload = await apiClient.post<any>("/api/agenda/medico/me/disponibilidades", {
         authenticated: true,
-        body: {
-          fechaInicio: isoInicio,
-          fechaFin: isoFin,
-          modalidad: modalidad,
-          slotMinutos: parseInt(slot, 10) || 30
-        }
+        body: bodyData,
       });
 
       if (payload?.success) {
-        Alert.alert("Éxito", "Horario agregado correctamente.");
+        setFeedback({ kind: 'success', message: 'Horario agregado correctamente.' });
         setShowForm(false);
         setFecha("");
         setHoraInicio("");
         setHoraFin("");
         fetchHorarios();
       } else {
-        Alert.alert("Error", payload?.message || "No se pudo agregar.");
+        setFeedback({ kind: 'error', message: payload?.message || 'No se pudo agregar el horario.' });
       }
     } catch (e: any) {
-      Alert.alert("Error", e.message || "Verifica el formato de las fechas y horas.");
+      const serverError = e?.data?.error || '';
+      const serverDetail = e?.data?.detail || '';
+      const msg = e?.data?.message || e?.message || 'Error de conexión.';
+      const fullMsg = [msg, serverError, serverDetail].filter(Boolean).join(' · ');
+      setFeedback({ kind: 'error', message: fullMsg });
     } finally {
       setGuardando(false);
     }
   };
 
-  const setQuickDate = (type: 'today' | 'tomorrow') => {
+  const setQuickDate = (type: 'today' | 'tomorrow' | 'now') => {
     const d = new Date();
     if (type === 'tomorrow') d.setDate(d.getDate() + 1);
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     setFecha(`${yyyy}-${mm}-${dd}`);
+
+    if (type === 'now') {
+      // Pre-fill hora inicio = ahora (redondeado al minuto), hora fin = +2 horas
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mi = String(d.getMinutes()).padStart(2, '0');
+      setHoraInicio(`${hh}:${mi}`);
+      const endH = new Date(d.getTime() + 2 * 60 * 60 * 1000);
+      const ehh = String(endH.getHours()).padStart(2, '0');
+      const emi = String(endH.getMinutes()).padStart(2, '0');
+      setHoraFin(`${ehh}:${emi}`);
+    }
   };
 
   const handleGenerarRecurrente = async () => {
+    setFeedback(null);
     const activeDays = weeklyPattern.filter(p => p.active);
-    console.log("Generando recurrente con dias:", activeDays.length);
-    
+
     if (activeDays.length === 0) {
-      Alert.alert("Error", "Debes seleccionar al menos un día activo.");
+      setFeedback({ kind: 'error', message: 'Debes seleccionar al menos un día activo.' });
       return;
     }
 
     try {
       setGenerating(true);
-      console.log("Enviando peticion a /api/agenda/medico/me/disponibilidades/recurrente...");
-      
+
+      // Save config first so it persists
+      await apiClient.post("/api/agenda/medico/me/recurrente-config", {
+        authenticated: true,
+        body: {
+          pattern: weeklyPattern, // Save full pattern (active/inactive)
+          modalidad,
+          slotMinutos: parseInt(slot, 10) || 30
+        }
+      });
+
       const payload = await apiClient.post<any>("/api/agenda/medico/me/disponibilidades/recurrente", {
         authenticated: true,
         body: {
@@ -147,18 +200,15 @@ const MedicoHorariosScreen: React.FC = () => {
         }
       });
 
-      console.log("Respuesta recibida:", JSON.stringify(payload));
-
       if (payload?.success) {
-        Alert.alert("Éxito", `Se han generado ${payload.createdCount} horarios para los próximos 30 días.`);
+        setFeedback({ kind: 'success', message: `Se han generado ${payload.createdCount} horarios para los próximos 30 días.` });
         setViewMode('specific');
         fetchHorarios();
       } else {
-        Alert.alert("Error", payload?.message || "No se pudo generar la agenda.");
+        setFeedback({ kind: 'error', message: payload?.message || 'No se pudo generar la agenda.' });
       }
     } catch (e: any) {
-      console.error("Error en handleGenerarRecurrente:", e);
-      Alert.alert("Error de Conexión", e.message || "No se pudo conectar con el servidor.");
+      setFeedback({ kind: 'error', message: e?.message || 'No se pudo conectar con el servidor.' });
     } finally {
       setGenerating(false);
     }
@@ -178,7 +228,13 @@ const MedicoHorariosScreen: React.FC = () => {
     try {
       const payload = await apiClient.get<any>("/api/agenda/medico/me/recurrente-config", { authenticated: true });
       if (payload?.success && payload.config) {
-        if (payload.config.pattern) setWeeklyPattern(payload.config.pattern);
+        if (payload.config.pattern && Array.isArray(payload.config.pattern)) {
+          // Merge with current state to keep all 7 days visible
+          setWeeklyPattern(prev => prev.map(p => {
+            const dbDay = payload.config.pattern.find((d: any) => d.dayOfWeek === p.dayOfWeek);
+            return dbDay ? { ...p, ...dbDay } : p;
+          }));
+        }
         if (payload.config.modalidad) setModalidad(payload.config.modalidad);
         if (payload.config.slotMinutos) setSlot(String(payload.config.slotMinutos));
       }
@@ -198,7 +254,7 @@ const MedicoHorariosScreen: React.FC = () => {
     try {
       const now = new Date();
       const end = new Date();
-      end.setDate(now.getDate() + 30); // Próximos 30 días
+      end.setDate(now.getDate() + 30);
 
       const payload = await apiClient.get<any>('/api/agenda/medico/me/disponibilidades', {
         authenticated: true,
@@ -211,8 +267,7 @@ const MedicoHorariosScreen: React.FC = () => {
         setHorarios([]);
       }
     } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'No se pudieron cargar los horarios.');
+      setFeedback({ kind: 'error', message: 'No se pudieron cargar los horarios.' });
     } finally {
       setLoading(false);
     }
@@ -230,11 +285,12 @@ const MedicoHorariosScreen: React.FC = () => {
       });
       if (payload?.success) {
         fetchHorarios();
+        setFeedback({ kind: 'success', message: bloqueadoActual ? 'Horario desbloqueado.' : 'Horario bloqueado.' });
       } else {
-        Alert.alert('Error', 'No se pudo actualizar el estado.');
+        setFeedback({ kind: 'error', message: 'No se pudo actualizar el estado.' });
       }
     } catch (error) {
-      Alert.alert('Error', 'Error de conexión.');
+      setFeedback({ kind: 'error', message: 'Error de conexión.' });
     }
   };
 
@@ -327,6 +383,9 @@ const MedicoHorariosScreen: React.FC = () => {
               <View style={styles.labelRow}>
                 <Text style={styles.label}>Fecha</Text>
                 <View style={styles.quickSelectRow}>
+                  <TouchableOpacity style={[styles.quickBtn, { backgroundColor: '#dcfce7' }]} onPress={() => setQuickDate('now')}>
+                    <Text style={[styles.quickBtnText, { color: '#16a34a' }]}>⚡ Ahora</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.quickBtn} onPress={() => setQuickDate('today')}>
                     <Text style={styles.quickBtnText}>Hoy</Text>
                   </TouchableOpacity>
@@ -347,9 +406,15 @@ const MedicoHorariosScreen: React.FC = () => {
             <View style={styles.rowInputs}>
               <View style={[styles.inputGroup, { flex: 1 }]}>
                 <Text style={styles.label}>Inicio (HH:MM)</Text>
-                <TextInput style={styles.input} value={horaInicio} onChangeText={setHoraInicio} placeholder="08:00" />
+                <TextInput 
+                  style={styles.input} 
+                  value={horaInicio} 
+                  onChangeText={setHoraInicio} 
+                  placeholder="Ej: 08:30" 
+                  keyboardType="numbers-and-punctuation"
+                />
                 <View style={styles.timePresets}>
-                  {['08:00', '09:00', '14:00'].map(t => (
+                  {['07:00', '08:00', '09:00', '14:00'].map(t => (
                     <TouchableOpacity key={t} style={styles.miniBtn} onPress={() => setHoraInicio(t)}>
                       <Text style={styles.miniBtnText}>{t}</Text>
                     </TouchableOpacity>
@@ -357,10 +422,16 @@ const MedicoHorariosScreen: React.FC = () => {
                 </View>
               </View>
               <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Fin (HH:MM)</Text>
-                <TextInput style={styles.input} value={horaFin} onChangeText={setHoraFin} placeholder="13:00" />
+                <Text style={styles.label}>Fin (Auto-calc)</Text>
+                <TextInput 
+                  style={styles.input} 
+                  value={horaFin} 
+                  onChangeText={setHoraFin} 
+                  placeholder="Ej: 09:00" 
+                  keyboardType="numbers-and-punctuation"
+                />
                 <View style={styles.timePresets}>
-                  {['12:00', '13:00', '18:00'].map(t => (
+                  {['12:00', '13:00', '17:00', '23:59'].map(t => (
                     <TouchableOpacity key={t} style={styles.miniBtn} onPress={() => setHoraFin(t)}>
                       <Text style={styles.miniBtnText}>{t}</Text>
                     </TouchableOpacity>
@@ -474,7 +545,9 @@ const MedicoHorariosScreen: React.FC = () => {
         <MedicoHeader title="Mis Horarios" />
       </View>
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingHorizontal: 20 }]}>
-        
+
+        <FeedbackBanner feedback={feedback} onDismiss={() => setFeedback(null)} />
+
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Disponibilidad</Text>

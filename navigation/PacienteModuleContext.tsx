@@ -3,6 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Platform } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './types';
+import PacienteNotificationModal from '../components/PacienteNotificationModal';
 
 /**
  * List of sidebar modules that stay mounted inside the portal.
@@ -12,8 +13,9 @@ export const PORTAL_MODULES = [
   'DashboardPaciente',
   'NuevaConsultaPaciente',
   'PacienteCitas',
-  'SalaEsperaVirtualPaciente',
+  'WaitingRoom',
   'PacienteChat',
+  'PacienteAsistente',
   'PacienteRecetasDocumentos',
   'PacientePerfil',
   'PacienteConfiguracion',
@@ -34,25 +36,30 @@ type PacienteModuleContextValue = {
    * Otherwise, push onto the stack as usual.
    */
   portalNavigate: (route: string, params?: Record<string, unknown>) => void;
-  /** True when the notification drawer is visible */
-  isNotificationsOpen: boolean;
-  /** Show or hide the notification drawer */
-  setNotificationsOpen: (open: boolean) => void;
   /** Global sidebar toggle state (Desktop & Mobile) */
   isSidebarOpen: boolean;
   toggleSidebar: () => void;
+  /** Notification drawer state */
+  isNotificationsOpen: boolean;
+  setIsNotificationsOpen: (open: boolean) => void;
 };
 
 const fallbackCtx: PacienteModuleContextValue = {
   isInsidePortal: false,
   activeModule: 'DashboardPaciente',
-  setActiveModule: () => undefined,
-  portalNavigate: () => undefined,
-  isNotificationsOpen: false,
-  setNotificationsOpen: () => undefined,
+  setActiveModule: () => {
+    console.warn('usePacienteModule: setActiveModule called outside of PacienteModuleProvider');
+  },
+  portalNavigate: () => {
+    console.warn('usePacienteModule: portalNavigate called outside of PacienteModuleProvider');
+  },
   isSidebarOpen: false,
   toggleSidebar: () => {
     console.warn('usePacienteModule: toggleSidebar called outside of PacienteModuleProvider');
+  },
+  isNotificationsOpen: false,
+  setIsNotificationsOpen: () => {
+    console.warn('usePacienteModule: setIsNotificationsOpen called outside of PacienteModuleProvider');
   },
 };
 
@@ -71,25 +78,49 @@ export function isPortalModule(route: string): route is PortalModule {
 
 type ProviderProps = {
   initialModule?: PortalModule;
+  isPortal?: boolean;
   children: React.ReactNode;
 };
 
 export const PacienteModuleProvider: React.FC<ProviderProps> = ({
   initialModule = 'DashboardPaciente',
+  isPortal = false,
+  children,
+}) => {
+  const outerContext = useContext(PacienteModuleContext);
+  const isAlreadyNested = outerContext !== fallbackCtx && outerContext.isInsidePortal;
+
+  // If we are already inside a portal, we don't need to provide a new context.
+  if (isAlreadyNested) {
+    return <>{children}</>;
+  }
+
+  return (
+    <PacienteModuleRootProvider initialModule={initialModule} isPortal={isPortal}>
+      {children}
+    </PacienteModuleRootProvider>
+  );
+};
+
+const PacienteModuleRootProvider: React.FC<{ 
+  initialModule?: PortalModule; 
+  isPortal: boolean;
+  children: React.ReactNode 
+}> = ({
+  initialModule = 'DashboardPaciente',
+  isPortal,
   children,
 }) => {
   const [activeModule, setActiveModuleRaw] = useState<PortalModule>(initialModule);
-  const [isNotificationsOpen, setNotificationsOpen] = useState(false);
   
-  // Initial state: closed on mobile devices or small screens, open on desktop web
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (Platform.OS !== 'web') return false;
-    // On web, check width if possible
     if (typeof window !== 'undefined') {
       return window.innerWidth >= 1024;
     }
     return true;
   });
+
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const setActiveModule = useCallback((mod: PortalModule) => {
@@ -98,36 +129,44 @@ export const PacienteModuleProvider: React.FC<ProviderProps> = ({
 
   const portalNavigate = useCallback(
     (route: string, params?: Record<string, unknown>) => {
-      if (isPortalModule(route)) {
-        setActiveModuleRaw(route);
-      } else {
-        (navigation.navigate as any)(route, params);
+      if (isPortal) {
+        if (isPortalModule(route)) {
+          setActiveModuleRaw(route);
+          return;
+        }
       }
+      (navigation.navigate as any)(route, params);
     },
-    [navigation]
+    [navigation, isPortal]
   );
   
   const toggleSidebar = useCallback(() => {
     setIsSidebarOpen((prev) => !prev);
   }, []);
 
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
   const value = useMemo<PacienteModuleContextValue>(
     () => ({
-      isInsidePortal: true,
+      isInsidePortal: isPortal,
       activeModule,
       setActiveModule,
       portalNavigate,
-      isNotificationsOpen,
-      setNotificationsOpen,
       isSidebarOpen,
       toggleSidebar,
+      isNotificationsOpen,
+      setIsNotificationsOpen,
     }),
-    [activeModule, portalNavigate, setActiveModule, isNotificationsOpen, isSidebarOpen, toggleSidebar]
+    [isPortal, activeModule, portalNavigate, setActiveModule, isSidebarOpen, toggleSidebar, isNotificationsOpen]
   );
 
   return (
     <PacienteModuleContext.Provider value={value}>
       {children}
+      <PacienteNotificationModal 
+        visible={isNotificationsOpen} 
+        onClose={() => setIsNotificationsOpen(false)} 
+      />
     </PacienteModuleContext.Provider>
   );
 };

@@ -1,5 +1,5 @@
+import { apiClient } from './utils/api';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { sanitizeRemoteImageUrl, resolveRemoteImageSource } from './utils/imageSources';
 import {
   Alert,
   Image,
@@ -85,7 +85,20 @@ const normalizeText = (value: unknown) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const sanitizeFotoUrl = (value: unknown) => {
+  const clean = normalizeText(value);
+  if (!clean) return '';
+  if (clean.toLowerCase().startsWith('blob:')) return '';
+  return clean;
+};
 
+const resolveAvatarSource = (value: unknown): ImageSourcePropType => {
+  const clean = sanitizeFotoUrl(value);
+  if (clean) {
+    return { uri: clean };
+  }
+  return DefaultAvatar;
+};
 
 const parseDateMs = (value: string | null | undefined) => {
   if (!value) return Number.POSITIVE_INFINITY;
@@ -121,12 +134,12 @@ const MIN_REFRESH_INTERVAL_MS = 15000;
 
 const PacienteCitasScreen: React.FC = () => {
   const navigation = usePortalAwareNavigation();
-  const { isInsidePortal, setNotificationsOpen, isSidebarOpen, toggleSidebar } = usePacienteModule();
+  const { isInsidePortal, isSidebarOpen, toggleSidebar, setIsNotificationsOpen } = usePacienteModule();
   const { isDesktop: isDesktopLayout } = useResponsive();
   const { signOut } = useAuth();
   const { width: viewportWidth } = useWindowDimensions();
   const { t } = useLanguage();
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
   const [user, setUser] = useState<User | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
   const [loadingCitas, setLoadingCitas] = useState(false);
@@ -151,7 +164,7 @@ const PacienteCitasScreen: React.FC = () => {
 
       const token = await getAuthToken();
       if (token) {
-        const profileResponse = await fetch(apiUrl('/api/users/me/paciente-profile'), {
+        const profileResponse = await apiClient.fetch(apiUrl('/api/users/me/paciente-profile'), {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -170,7 +183,7 @@ const PacienteCitasScreen: React.FC = () => {
             apellidos: normalizeText((profileUser as any)?.apellidos),
             nombre: normalizeText((profileUser as any)?.nombres || (profileUser as any)?.nombre),
             apellido: normalizeText((profileUser as any)?.apellidos || (profileUser as any)?.apellido),
-            fotoUrl: sanitizeRemoteImageUrl((profileUser as any)?.fotoUrl),
+            fotoUrl: sanitizeFotoUrl((profileUser as any)?.fotoUrl),
           };
         }
       }
@@ -207,7 +220,7 @@ const PacienteCitasScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl('/api/agenda/me/citas?scope=all&limit=120'), {
+      const response = await apiClient.fetch(apiUrl('/api/agenda/me/citas?scope=all&limit=120'), {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -271,8 +284,8 @@ const PacienteCitasScreen: React.FC = () => {
     return plan ? `Paciente ${plan}` : 'Paciente';
   }, [user]);
 
-  const userAvatarSource: ImageSourcePropType = useMemo(() => resolveRemoteImageSource(user?.fotoUrl, DefaultAvatar), [user?.fotoUrl]);
-  const hasProfilePhoto = useMemo(() => Boolean(sanitizeRemoteImageUrl(user?.fotoUrl)), [user?.fotoUrl]);
+  const userAvatarSource: ImageSourcePropType = useMemo(() => resolveAvatarSource(user?.fotoUrl), [user?.fotoUrl]);
+  const hasProfilePhoto = useMemo(() => Boolean(sanitizeFotoUrl(user?.fotoUrl)), [user?.fotoUrl]);
 
   const filteredCitas = useMemo(() => {
     const query = normalizeText(searchText).toLowerCase();
@@ -288,9 +301,11 @@ const PacienteCitasScreen: React.FC = () => {
 
   const { upcomingCitas, historyCitas, cancelledCitas } = useMemo(() => {
     const now = Date.now();
+    const graceMs = 40 * 60 * 1000;
     const upcoming: CitaItem[] = [];
     const history: CitaItem[] = [];
     const cancelled: CitaItem[] = [];
+
     for (const cita of filteredCitas) {
       const estado = normalizeText(cita.estado).toLowerCase();
       if (estado.includes('cancel')) {
@@ -298,15 +313,17 @@ const PacienteCitasScreen: React.FC = () => {
         continue;
       }
       const startMs = parseDateMs(cita.fechaHoraInicio);
-      if (Number.isFinite(startMs) && startMs >= now) {
+      if (Number.isFinite(startMs) && (startMs + graceMs) >= now) {
         upcoming.push(cita);
       } else {
         history.push(cita);
       }
     }
+
     upcoming.sort((a, b) => parseDateMs(a.fechaHoraInicio) - parseDateMs(b.fechaHoraInicio));
     history.sort((a, b) => parseDateMs(b.fechaHoraInicio) - parseDateMs(a.fechaHoraInicio));
     cancelled.sort((a, b) => parseDateMs(b.fechaHoraInicio) - parseDateMs(a.fechaHoraInicio));
+
     return { upcomingCitas: upcoming, historyCitas: history, cancelledCitas: cancelled };
   }, [filteredCitas]);
 
@@ -348,7 +365,7 @@ const PacienteCitasScreen: React.FC = () => {
       const currentStart = cita?.fechaHoraInicio ? new Date(cita.fechaHoraInicio) : new Date();
       const nextStart = new Date(currentStart.getTime() + 24 * 60 * 60 * 1000);
 
-      const response = await fetch(apiUrl(`/api/agenda/me/citas/${cita.citaid}/reprogramar`), {
+      const response = await apiClient.fetch(apiUrl(`/api/agenda/me/citas/${cita.citaid}/reprogramar`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -388,7 +405,7 @@ const PacienteCitasScreen: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl(`/api/agenda/me/citas/${cita.citaid}/cancelar`), {
+      const response = await apiClient.fetch(apiUrl(`/api/agenda/me/citas/${cita.citaid}/cancelar`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -470,7 +487,7 @@ const PacienteCitasScreen: React.FC = () => {
               onChangeText={setSearchText}
             />
           </View>
-          <TouchableOpacity style={styles.notifBtn} onPress={() => setNotificationsOpen(true)}>
+          <TouchableOpacity style={styles.notifBtn} onPress={() => setIsNotificationsOpen(true)}>
             <MaterialIcons name="notifications" size={22} color={colors.dark} />
             <View style={styles.notifDot} />
           </TouchableOpacity>
@@ -558,7 +575,7 @@ const PacienteCitasScreen: React.FC = () => {
                   return (
                     <View key={cita.citaid} style={styles.citaCard}>
                       <View style={styles.citaTop}>
-                        <Image source={resolveRemoteImageSource(cita?.medico?.fotoUrl, DefaultAvatar)} style={styles.citaAvatar} />
+                        <Image source={resolveAvatarSource(cita?.medico?.fotoUrl)} style={styles.citaAvatar} />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.citaDoctor}>{normalizeText(cita?.medico?.nombreCompleto || 'Especialista')}</Text>
                           <Text style={styles.citaSpec}>{normalizeText(cita?.medico?.especialidad || 'Medicina General')}</Text>
@@ -597,7 +614,7 @@ const PacienteCitasScreen: React.FC = () => {
                             <TouchableOpacity
                               style={styles.actionJoin}
                               activeOpacity={0.8}
-                              onPress={() => navigation.navigate('SalaEsperaVirtualPaciente', { citaId: cita.citaid })}
+                              onPress={() => navigation.navigate('WaitingRoom', { citaId: cita.citaid })}
                             >
                               <MaterialIcons name="videocam" size={16} color="#fff" />
                               <Text style={styles.actionJoinText}>Unirse</Text>
@@ -627,7 +644,7 @@ const PacienteCitasScreen: React.FC = () => {
                             onPress={() => navigation.navigate('PacienteChat', {
                               doctorId: String(cita?.medico?.medicoid || ''),
                               doctorName: normalizeText(cita?.medico?.nombreCompleto || 'Especialista'),
-                              doctorAvatarUrl: sanitizeRemoteImageUrl(cita?.medico?.fotoUrl) || null,
+                              doctorAvatarUrl: sanitizeFotoUrl(cita?.medico?.fotoUrl) || null,
                             })}
                           >
                             <MaterialIcons name="chat-bubble-outline" size={14} color={colors.blue} />
@@ -659,7 +676,7 @@ const PacienteCitasScreen: React.FC = () => {
                   return (
                     <View key={cita.citaid} style={styles.citaCard}>
                       <View style={styles.citaTop}>
-                        <Image source={resolveRemoteImageSource(cita?.medico?.fotoUrl, DefaultAvatar)} style={styles.citaAvatar} />
+                        <Image source={resolveAvatarSource(cita?.medico?.fotoUrl)} style={styles.citaAvatar} />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.citaDoctor}>{normalizeText(cita?.medico?.nombreCompleto || 'Especialista')}</Text>
                           <Text style={styles.citaSpec}>{normalizeText(cita?.medico?.especialidad || 'Medicina General')}</Text>
@@ -703,7 +720,7 @@ const PacienteCitasScreen: React.FC = () => {
                 cancelledCitas.map((cita) => (
                   <View key={cita.citaid} style={[styles.citaCard, styles.citaCardCancelled]}>
                     <View style={styles.citaTop}>
-                      <Image source={resolveRemoteImageSource(cita?.medico?.fotoUrl, DefaultAvatar)} style={[styles.citaAvatar, { opacity: 0.6 }]} />
+                      <Image source={resolveAvatarSource(cita?.medico?.fotoUrl)} style={[styles.citaAvatar, { opacity: 0.6 }]} />
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.citaDoctor, { color: colors.muted }]}>{normalizeText(cita?.medico?.nombreCompleto || 'Especialista')}</Text>
                         <Text style={styles.citaSpec}>{normalizeText(cita?.medico?.especialidad || 'Medicina General')}</Text>
@@ -735,135 +752,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  containerDesktop: { flexDirection: 'row' },
-  containerMobile: { flexDirection: 'column' },
-  mobileMenuBar: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 8,
-    backgroundColor: colors.bg,
-  },
-  mobileMenuButton: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  drawerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    zIndex: 2000,
-  },
-  drawerContent: {
-    width: 280,
-    height: '100%',
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-    elevation: 20,
-  },
-  sidebarContent: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#fff',
-  },
-  logoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 30,
-    paddingHorizontal: 5,
-  },
-  logo: {
-    width: 40,
-    height: 40,
-    resizeMode: 'contain',
-  },
-  logoTitle: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: colors.primary,
-    letterSpacing: 1,
-  },
-  logoSubtitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.muted,
-    marginTop: -2,
-    textTransform: 'uppercase',
-  },
-  userBox: {
-    padding: 16,
-    backgroundColor: '#f8fbff',
-    borderRadius: 16,
-    alignItems: 'center',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#eef4fb',
-  },
-  userAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginBottom: 10,
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  userName: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: colors.dark,
-    textAlign: 'center',
-  },
-  userPlan: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary,
-    marginTop: 2,
-  },
-  menuScroll: {
-    flex: 1,
-    marginTop: 20,
-  },
-  menuItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  menuItemActive: {
-    backgroundColor: 'rgba(19,127,236,0.1)',
-  },
-  menuText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.muted,
-  },
-  menuTextActive: {
-    color: colors.primary,
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.blue,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 20,
-  },
-  logoutText: {
-    color: '#fff',
-    fontWeight: '800',
-  },
-
   main: {
     flex: 1,
     paddingHorizontal: Platform.OS === 'web' ? 26 : 14,
@@ -1203,4 +1091,3 @@ const PacienteCitasScreenWrapper: React.FC = (props) => (
 );
 
 export default PacienteCitasScreenWrapper;
-

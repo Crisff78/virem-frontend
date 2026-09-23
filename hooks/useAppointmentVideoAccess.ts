@@ -22,13 +22,13 @@ export type CallAccessState = {
 };
 
 const messages = {
-  ok: 'Videollamada disponible.',
+  ok: 'Consulta virtual disponible.',
   cita_sin_fecha: 'La cita no tiene fecha asignada.',
-  cita_no_activa: 'Esta cita no esta activa.',
+  cita_no_activa: 'Esta cita no está activa.',
   fuera_de_horario_temprano:
-    'La videollamada estara disponible cuando llegue la hora de la cita.',
-  fuera_de_horario_tarde: 'La ventana de la videollamada ya cerro.',
-  unknown: 'No se puede iniciar la videollamada.',
+    'La sala abrirá cuando se acerque la hora de la cita.',
+  fuera_de_horario_tarde: 'La ventana de la consulta virtual ya cerró.',
+  unknown: 'No se puede iniciar la consulta virtual.',
 };
 
 function clampSec(ms: number) {

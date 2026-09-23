@@ -1,81 +1,49 @@
-import React, { useEffect, useRef, useState } from 'react';
-import {
-  Animated,
-  DimensionValue,
-  LayoutChangeEvent,
-  StyleSheet,
-  View,
-  ViewStyle,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+/**
+ * Skeleton placeholder component for loading states.
+ */
+import React from 'react';
+import { Animated, StyleSheet, View } from 'react-native';
 
-interface SkeletonProps {
-  width?: DimensionValue;
-  height?: DimensionValue;
+type Props = {
+  width?: number | string;
+  height?: number | string;
   borderRadius?: number;
-  style?: ViewStyle;
-}
+  style?: any;
+};
 
-const Skeleton = ({
+const Skeleton: React.FC<Props> = ({
   width = '100%',
   height = 20,
-  borderRadius = 4,
+  borderRadius = 12,
   style,
-}: SkeletonProps): JSX.Element => {
-  const animatedValue = useRef(new Animated.Value(0)).current;
-  const [measuredWidth, setMeasuredWidth] = useState(
-    typeof width === 'number' ? width : 0
-  );
+}) => {
+  const pulse = React.useRef(new Animated.Value(0.3)).current;
 
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.timing(animatedValue, {
-        toValue: 1,
-        duration: 1500,
-        useNativeDriver: true,
-      })
+  React.useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.7, duration: 800, useNativeDriver: false }),
+        Animated.timing(pulse, { toValue: 0.3, duration: 800, useNativeDriver: false }),
+      ])
     );
-    animation.start();
-    return () => animation.stop();
-  }, [animatedValue]);
-
-  const handleLayout = (event: LayoutChangeEvent) => {
-    const next = event.nativeEvent.layout.width;
-    if (next && next !== measuredWidth) {
-      setMeasuredWidth(next);
-    }
-  };
-
-  const translateX = animatedValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-(measuredWidth || 1), measuredWidth || 1],
-  });
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
 
   return (
-    <View
-      onLayout={handleLayout}
-      style={[styles.container, { width, height, borderRadius }, style]}
-    >
-      {measuredWidth > 0 ? (
-        <Animated.View
-          style={[StyleSheet.absoluteFill, { transform: [{ translateX }] }]}
-        >
-          <LinearGradient
-            colors={['transparent', 'rgba(255, 255, 255, 0.5)', 'transparent']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </Animated.View>
-      ) : null}
-    </View>
+    <Animated.View
+      style={[
+        styles.skeleton,
+        { width: width as any, height: height as any, borderRadius, opacity: pulse },
+        style,
+      ]}
+    />
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#E1E9EE',
-    overflow: 'hidden',
+  skeleton: {
+    backgroundColor: '#e2e8f0',
   },
 });
 

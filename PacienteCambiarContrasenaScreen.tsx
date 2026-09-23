@@ -32,7 +32,7 @@ const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
 const PacienteCambiarContrasenaScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { t, tx } = useLanguage();
-  const { isInsidePortal, isSidebarOpen, toggleSidebar } = usePacienteModule();
+  const { isInsidePortal, isSidebarOpen, toggleSidebar, setIsNotificationsOpen } = usePacienteModule();
   const { isDesktop: isDesktopLayout } = useResponsive();
   const { signOut, fullName, planLabel, fotoUrl } = usePatientPortalSession();
 
@@ -179,14 +179,26 @@ const PacienteCambiarContrasenaScreen: React.FC = () => {
         style={[styles.main, !isDesktopLayout && styles.mainMobile]}
         contentContainerStyle={{ paddingBottom: 30 }}
       >
-        {!isSidebarOpen && (
-          <TouchableOpacity 
-            style={styles.hamburgerBtn} 
-            onPress={toggleSidebar}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginTop: 20 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            {!isSidebarOpen && (
+              <TouchableOpacity 
+                style={[styles.hamburgerBtn, { marginLeft: 0, marginTop: 0, marginBottom: 0 }]} 
+                onPress={toggleSidebar}
+              >
+                <MaterialIcons name="menu" size={26} color={colors.dark} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 }}
+            onPress={() => setIsNotificationsOpen(true)}
           >
-            <MaterialIcons name="menu" size={26} color={colors.dark} />
+            <MaterialIcons name="notifications" size={22} color={colors.dark} />
+            <View style={{ position: 'absolute', top: 10, right: 10, width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444', borderWidth: 1.5, borderColor: '#fff' }} />
           </TouchableOpacity>
-        )}
+        </View>
         <View style={styles.contentWrap}>
           <Text style={styles.pageTitle}>
             {tx({ es: 'Cambiar Contrasena', en: 'Change Password', pt: 'Alterar Senha' })}

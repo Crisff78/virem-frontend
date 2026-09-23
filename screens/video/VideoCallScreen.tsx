@@ -1,18 +1,24 @@
-import React, { useEffect, useMemo } from 'react';
-import { Alert, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import {
+  Alert,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ActivityIndicator,
+} from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
-import VideoContainer from '../../components/video/VideoContainer';
-import CallControls from '../../components/video/CallControls';
 import ConnectionStatus from '../../components/video/ConnectionStatus';
-import { useZegoCall } from '../../hooks/useZegoCall';
-import { useWebRTCCall } from '../../hooks/useWebRTCCall';
+import JitsiVideoContainer from '../../components/video/JitsiVideoContainer';
+import { useVideoCall } from '../../hooks/useVideoCall';
 import { useCallSignaler } from '../../hooks/useCallSignaling';
 import { useAppointmentVideoAccess, formatCountdown } from '../../hooks/useAppointmentVideoAccess';
-import { isZegoAvailable } from '../../services/zegoService';
 import type { RootStackParamList } from '../../navigation/types';
 
 type VideoRoute = RouteProp<RootStackParamList, 'VideoCall'>;
@@ -24,15 +30,7 @@ const VideoCallScreen: React.FC = () => {
   const initiate = Boolean(route.params?.initiate);
 
   const access = useAppointmentVideoAccess(citaId);
-
-  // Siempre llamamos ambos hooks (regla de hooks: no condicionales).
-  // Cada uno detecta su plataforma y es no-op en la plataforma incorrecta.
-  const zegoCall = useZegoCall(citaId);
-  const webCall = useWebRTCCall(citaId, initiate);
-
-  // Usamos el hook adecuado según la plataforma
-  const call = Platform.OS === 'web' ? webCall : zegoCall;
-
+  const call = useVideoCall(citaId);
   const signaler = useCallSignaler();
 
   /** Iniciar la llamada cuando el acceso esté disponible */
@@ -41,182 +39,115 @@ const VideoCallScreen: React.FC = () => {
     if (call.state !== 'idle') return;
     if (!access.canJoin) return;
 
-    // Native: requiere Zego SDK (dev client)
-    if (Platform.OS !== 'web' && !isZegoAvailable()) return;
-
     call.start();
-
-    // Notificar al otro extremo que hay una llamada entrante
-    if (initiate) {
-      signaler.invite(citaId).catch(() => undefined);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [citaId, access.canJoin, call.state, initiate]);
+  }, [citaId, access.canJoin, call.state]);
 
   /** Salir si access deja de ser válido mientras la llamada está activa */
   useEffect(() => {
-    if (!access.canJoin && call.state === 'live') {
+    if (!access.canJoin && (call.state === 'connected' || call.state === 'joining')) {
       const t = setTimeout(() => call.end('time_up'), 1500);
       return () => clearTimeout(t);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [access.canJoin]);
+  }, [access.canJoin, call.state]);
 
-  const handleEnd = async () => {
+  const handleEnd = useCallback(async () => {
     await call.end();
     if (citaId) signaler.end(citaId).catch(() => undefined);
     navigation.goBack();
-  };
+  }, [call, citaId, signaler, navigation]);
 
-  const durationLabel = useMemo(() => {
-    if (call.state !== 'live') return undefined;
-    return `${formatCountdown(call.durationSec)}  ·  cierra en ${formatCountdown(
-      Math.floor(call.remainingMs / 1000)
-    )}`;
-  }, [call.state, call.durationSec, call.remainingMs]);
-
-  // ── Fallback para native sin SDK Zego ────────────────────────────────────
-  if (!isZegoAvailable() && Platform.OS !== 'web') {
-    return (
-      <View style={styles.fallbackWrap}>
-        <MaterialIcons name="warning" size={42} color="#fbbf24" />
-        <Text style={styles.fallbackTitle}>SDK de video no disponible</Text>
-        <Text style={styles.fallbackBody}>
-          Esta versión corre en Expo Go. La videollamada requiere el dev client (npx expo
-          prebuild + EAS build) con `zego-express-engine-reactnative` instalado.
-        </Text>
-        <TouchableOpacity style={styles.fallbackBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.fallbackBtnTxt}>Volver</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  // ── Auto-redirect when the OTHER side ends the call ──
+  useEffect(() => {
+    if (call.state !== 'ended') return;
+    if (!initiate) {
+      const timer = setTimeout(() => {
+        Alert.alert(
+          'Consulta Finalizada',
+          'La consulta ha finalizado.',
+          [
+            { text: 'Ver Recetas', onPress: () => navigation.navigate('PacienteRecetasDocumentos' as any) },
+            { text: 'Volver', onPress: () => navigation.goBack() },
+          ]
+        );
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [call.state, initiate, navigation]);
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
 
-      {/* Video remoto fullscreen */}
-      <VideoContainer
-        mode="remote"
-        streamId={call.remoteStreamId}
-        stream={call.remoteStream}
-        enabled={Boolean(call.remoteStreamId || call.remoteStream)}
-        avatarLabel={call.remoteUserName || 'Esperando al otro participante...'}
-        fullscreen
-      />
+      {call.state === 'connected' && call.jitsiConfig ? (
+        <JitsiVideoContainer config={call.jitsiConfig} onEnd={handleEnd} />
+      ) : (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#137fec" />
+          <Text style={styles.loadingText}>
+            {call.state === 'joining' ? 'Conectando con la sala de Jitsi...' : 'Preparando consulta...'}
+          </Text>
+          <ConnectionStatus state={call.state} />
+          
+          <TouchableOpacity style={styles.closeBtn} onPress={handleEnd}>
+            <MaterialIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      )}
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() =>
-            Alert.alert('Salir', '¿Finalizar la llamada?', [
-              { text: 'Cancelar', style: 'cancel' },
-              { text: 'Finalizar', style: 'destructive', onPress: handleEnd },
-            ])
-          }
-        >
-          <MaterialIcons name="close" size={24} color="#fff" />
-        </TouchableOpacity>
-        <ConnectionStatus state={call.state} remoteUserName={call.remoteUserName} />
-        <View style={{ width: 24 }} />
-      </View>
-
-      {/* Mensaje de error */}
       {call.error ? (
         <View style={styles.errorBanner}>
-          <MaterialIcons name="error-outline" size={16} color="#fff" />
+          <MaterialIcons name="error-outline" size={20} color="#fff" />
           <Text style={styles.errorTxt}>{call.error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => call.start()}>
+            <Text style={styles.retryBtnText}>REINTENTAR</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
-
-      {/* Video local PiP */}
-      <View style={styles.localPip}>
-        <VideoContainer
-          mode="local"
-          streamId={call.localStreamId || null}
-          stream={call.localStream}
-          enabled={call.cameraEnabled}
-          avatarLabel="Tu cámara"
-        />
-      </View>
-
-      {/* Controles */}
-      <View style={styles.controlsWrap}>
-        <CallControls
-          micEnabled={call.micEnabled}
-          cameraEnabled={call.cameraEnabled}
-          onToggleMic={call.toggleMic}
-          onToggleCamera={call.toggleCamera}
-          onFlipCamera={call.flipCamera}
-          onEnd={handleEnd}
-          durationLabel={durationLabel}
-        />
-      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  header: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 20,
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
+  loadingContainer: {
+    flex: 1,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 16,
+    padding: 24,
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 30,
+    right: 20,
+    padding: 8,
   },
   errorBanner: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 100 : 70,
+    bottom: 40,
     left: 16,
     right: 16,
-    backgroundColor: 'rgba(220,53,69,0.9)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    backgroundColor: '#ef4444',
+    padding: 12,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  errorTxt: { color: '#fff', flex: 1, fontSize: 12, fontWeight: '700' },
-  localPip: {
-    position: 'absolute',
-    right: 16,
-    top: Platform.OS === 'ios' ? 100 : 80,
-    width: 110,
-    height: 160,
-    borderRadius: 14,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.4)',
+  errorTxt: { color: '#fff', fontSize: 13, fontWeight: '600', flex: 1 },
+  retryBtn: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
-  controlsWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  fallbackWrap: {
-    flex: 1,
-    backgroundColor: '#0a1931',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    gap: 12,
-  },
-  fallbackTitle: { color: '#fff', fontSize: 18, fontWeight: '900', textAlign: 'center' },
-  fallbackBody: { color: '#cbd5e1', fontSize: 13, textAlign: 'center', lineHeight: 19 },
-  fallbackBtn: {
-    marginTop: 16,
-    paddingHorizontal: 22,
-    paddingVertical: 10,
-    backgroundColor: '#137fec',
-    borderRadius: 10,
-  },
-  fallbackBtnTxt: { color: '#fff', fontWeight: '800' },
+  retryBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 });
 
 export default VideoCallScreen;

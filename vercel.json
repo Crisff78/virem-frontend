@@ -1,11 +1,11 @@
 {
   "framework": null,
-  "installCommand": "npm ci",
-  "buildCommand": "npx expo export --platform web --output-dir dist-web --clear",
+  "installCommand": "npm install --legacy-peer-deps",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist-web",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!_expo/|assets/|favicon.ico).*|.*\\..*)",
       "destination": "/index.html"
     }
   ]

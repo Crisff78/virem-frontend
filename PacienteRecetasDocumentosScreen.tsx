@@ -23,12 +23,21 @@ import { useResponsive } from './hooks/useResponsive';
 import { useLanguage } from './localization/LanguageContext';
 import { usePatientPortalSession } from './hooks/usePatientPortalSession';
 import type { RootStackParamList } from './navigation/types';
-import { resolveRemoteImageSource, sanitizeRemoteImageUrl } from './utils/imageSources';
+import { resolveRemoteImageSource } from './utils/imageSources';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
 const STORAGE_KEY = 'user';
 const LEGACY_USER_STORAGE_KEY = 'userProfile';
+
+function escapeHTML(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 const colors = {
   primary: '#137fec',
@@ -58,6 +67,9 @@ type DocumentItem = {
   icon: string;
   tint: string;
   bg: string;
+  diagnostico?: string;
+  medicamentos?: any[];
+  instrucciones?: string;
 };
 
 const parseUser = (raw: string | null): User | null => {
@@ -69,7 +81,12 @@ const parseUser = (raw: string | null): User | null => {
   }
 };
 
-
+const sanitizeFotoUrl = (value: unknown) => {
+  const clean = String(value || '').trim();
+  if (!clean) return '';
+  if (clean.toLowerCase().startsWith('blob:')) return '';
+  return clean;
+};
 
 const recetas: DocumentItem[] = [
   {
@@ -115,30 +132,117 @@ const sanitizeFileName = (raw: string) =>
     .replace(/\s+/g, '_')
     .replace(/[^\w\-]/g, '');
 
-const buildDocumentContent = (item: DocumentItem) =>
-  `VIREM - Documento de ejemplo\n\nTítulo: ${item.title}\nEmitido por: ${item.doctor}\nFecha: ${item.date}\n\nNota: Este archivo es una demostración de descarga para pruebas de interfaz.`;
+const buildDocumentHTML = (item: DocumentItem) => {
+  const medsHTML = (item.medicamentos || []).map((m, i) => `
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHTML(m.nombre)}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHTML(m.dosis)}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHTML(m.frecuencia)}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHTML(m.duracion)}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Helvetica', sans-serif; color: #333; line-height: 1.6; padding: 40px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #137fec; padding-bottom: 20px; margin-bottom: 30px; }
+        .logo-text { color: #137fec; font-size: 24px; font-weight: bold; }
+        .info-row { margin-bottom: 10px; }
+        .label { font-weight: bold; color: #666; width: 120px; display: inline-block; }
+        .section-title { background: #f4f8ff; padding: 8px 15px; font-weight: bold; color: #137fec; margin-top: 30px; border-left: 4px solid #137fec; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { text-align: left; background: #f9f9f9; padding: 10px; border-bottom: 2px solid #eee; color: #666; font-size: 13px; }
+        .footer { margin-top: 50px; font-size: 11px; color: #999; border-top: 1px solid #eee; padding-top: 20px; text-align: center; }
+        @media print { body { padding: 0; } .no-print { display: none; } }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div>
+          <div class="logo-text">VIREM</div>
+          <div style="font-size: 12px; color: #666;">Salud Digital de Próxima Generación</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: bold;">RECETA MÉDICA</div>
+          <div style="font-size: 12px; color: #666;">Folio: ${escapeHTML(Math.floor(Math.random() * 1000000))}</div>
+        </div>
+      </div>
+
+      <div class="info-row"><span class="label">Paciente:</span> <span>${escapeHTML(item.title.includes('Receta') ? 'Paciente Registrado' : item.title)}</span></div>
+      <div class="info-row"><span class="label">Médico:</span> <span>${escapeHTML(item.doctor)}</span></div>
+      <div class="info-row"><span class="label">Fecha:</span> <span>${escapeHTML(item.date)}</span></div>
+
+      <div class="section-title">DIAGNÓSTICO / EVALUACIÓN</div>
+      <div style="padding: 15px;">${escapeHTML(item.diagnostico || 'Consulta general de seguimiento.')}</div>
+
+      <div class="section-title">TRATAMIENTO Y MEDICAMENTOS</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Medicamento</th>
+            <th>Dosis</th>
+            <th>Frecuencia</th>
+            <th>Duración</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${medsHTML || '<tr><td colspan="4" style="text-align:center; padding: 20px; color: #999;">No se especificaron medicamentos en este registro.</td></tr>'}
+        </tbody>
+      </table>
+
+      ${item.instrucciones ? `
+        <div class="section-title">INSTRUCCIONES ADICIONALES</div>
+        <div style="padding: 15px;">${escapeHTML(item.instrucciones)}</div>
+      ` : ''}
+
+      <div style="margin-top: 60px; display: flex; justify-content: flex-end;">
+        <div style="text-align: center; width: 250px; border-top: 1px solid #333; padding-top: 10px;">
+          <div style="font-weight: bold;">${escapeHTML(item.doctor)}</div>
+          <div style="font-size: 12px; color: #666;">Firma Digital Autorizada</div>
+        </div>
+      </div>
+
+      <div class="footer">
+        Este documento es una receta médica digital válida emitida a través de la plataforma VIREM.<br>
+        Verifique la autenticidad en app.virem.salud
+      </div>
+      
+      <script>
+        window.onload = function() {
+          setTimeout(function() { window.print(); }, 500);
+        }
+      </script>
+    </body>
+    </html>
+  `;
+};
 
 const downloadExampleDocument = (item: DocumentItem) => {
   if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof document !== 'undefined') {
-    const blob = new Blob([buildDocumentContent(item)], {
-      type: 'text/plain;charset=utf-8',
-    });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${sanitizeFileName(item.title)}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+    const html = buildDocumentHTML(item);
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    }
     return;
   }
 
+  // Fallback para mobile usando Share con texto formateado
+  let shareText = `VIREM - RECETA MÉDICA\n\n`;
+  shareText += `Médico: ${item.doctor}\n`;
+  shareText += `Fecha: ${item.date}\n\n`;
+  shareText += `DIAGNÓSTICO: ${item.diagnostico || 'N/A'}\n\n`;
+  shareText += `TRATAMIENTO:\n`;
+  (item.medicamentos || []).forEach(m => {
+    shareText += `- ${m.nombre}: ${m.dosis} (${m.frecuencia} por ${m.duracion})\n`;
+  });
+  
   Share.share({
     title: item.title,
-    message: `${buildDocumentContent(item)}\n\n(Documento de ejemplo VIREM)`,
-  }).catch(() => {
-    Alert.alert('Error', 'No se pudo compartir el documento en este dispositivo.');
+    message: shareText,
   });
 };
 
@@ -206,13 +310,15 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
         const payload = await apiClient.get<any>("/api/paciente/me/recetas", { authenticated: true });
         if (payload?.success && Array.isArray(payload.recetas)) {
           const mapped = payload.recetas.map((r: any) => ({
-            title: r.diagnostico || "Receta M�dica",
-            doctor: r.medico_nombre || "M�dico",
+            title: r.diagnostico || "Receta Médica",
+            doctor: r.medico_nombre || "Médico",
             date: new Date(r.created_at).toLocaleDateString(),
             icon: "picture-as-pdf",
             tint: "#ef4444",
             bg: "#fef2f2",
-            raw: JSON.stringify(r.medicamentos_json)
+            diagnostico: r.diagnostico,
+            medicamentos: r.medicamentos_json,
+            instrucciones: r.instrucciones
           }));
           setDbRecetas(mapped);
         }
@@ -293,7 +399,7 @@ const PacienteRecetasDocumentosScreen: React.FC = () => {
             Accede y descarga tu historial médico organizado por categorías.
           </Text>
 
-          <SectionBlock icon="description" title="Recetas Médicas" count="3 ARCHIVOS" items={dbRecetas.length > 0 ? dbRecetas : recetas} />
+          <SectionBlock icon="description" title="Recetas Médicas" count={(dbRecetas.length || 3) + " ARCHIVOS"} items={dbRecetas.length > 0 ? dbRecetas : recetas} />
           <SectionBlock
             icon="verified"
             title="Certificados y Otros"
@@ -518,7 +624,3 @@ const PacienteRecetasDocumentosScreenWrapper: React.FC = (props) => (
 );
 
 export default PacienteRecetasDocumentosScreenWrapper;
-
-
-
-

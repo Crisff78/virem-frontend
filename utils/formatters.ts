@@ -31,6 +31,19 @@ export const formatDateTime = (date: string | Date | null | undefined) => {
   }
 };
 
+export const formatOnlyDate = (date: any) => {
+  if (!date) return '';
+  const str = String(date).trim();
+  // Si viene en formato ISO (YYYY-MM-DD...), extraemos solo la fecha y la ponemos bonita
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`; // DD/MM/YYYY
+  }
+  // Si ya viene como DD/MM/YYYY, lo dejamos igual
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(str)) return str;
+  return str;
+};
+
 export const normalizeText = (v: any) => String(v || '').trim();
 export const normalizeSearch = (v: any) => normalizeText(v).toLowerCase();
 
@@ -49,4 +62,16 @@ export const titleCase = (value: string) => {
   return text
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+export const formatCedula = (cedula: any) => {
+  const val = String(cedula || '').replace(/\D/g, '');
+  if (val.length !== 11) return val;
+  return `${val.slice(0, 3)}-${val.slice(3, 10)}-${val.slice(10)}`;
+};
+
+export const formatPhone = (phone: any) => {
+  const val = String(phone || '').replace(/\D/g, '');
+  if (val.length !== 10) return val;
+  return `(${val.slice(0, 3)}) ${val.slice(3, 6)}-${val.slice(6)}`;
 };

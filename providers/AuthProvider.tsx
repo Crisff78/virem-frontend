@@ -4,6 +4,7 @@ import React, {
     useContext,
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from 'react';
 
@@ -15,6 +16,7 @@ import {
     SessionSnapshot,
     subscribeToSession,
 } from '../utils/session';
+import { subscribeToAuthFailure } from '../utils/api';
 
 type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
 
@@ -38,21 +40,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [status, setStatus] = useState<AuthStatus>('loading');
     const [token, setToken] = useState('');
     const [user, setUser] = useState<Record<string, unknown> | null>(null);
+    const tokenRef = useRef('');
+    const logoutRef = useRef<Promise<void> | null>(null);
+    const snapshotVersionRef = useRef(0);
 
     const syncSnapshot = useCallback((snapshot: SessionSnapshot<Record<string, unknown>>) => {
+        snapshotVersionRef.current++;
+        tokenRef.current = snapshot.token || '';
         setToken(snapshot.token || '');
         setUser(snapshot.user || null);
         setStatus(resolveStatus(snapshot.token || ''));
     }, []);
 
     const refreshSession = useCallback(async () => {
+        const version = snapshotVersionRef.current;
         const snapshot = await loadSession<Record<string, unknown>>();
-        syncSnapshot(snapshot);
+        if (version === snapshotVersionRef.current && !logoutRef.current) syncSnapshot(snapshot);
         return snapshot;
     }, [syncSnapshot]);
 
     const signIn = useCallback(
         async (nextToken: string, nextUser?: Record<string, unknown> | null) => {
+            // A delayed logout must never erase a newly established session.
+            await logoutRef.current;
             const snapshot = await saveSession(nextToken, nextUser === null ? undefined : nextUser);
             syncSnapshot(snapshot);
             return snapshot;
@@ -70,9 +80,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     const signOut = useCallback(async () => {
-        await clearSession();
+        if (logoutRef.current) return logoutRef.current;
         syncSnapshot({ token: '', user: null });
+        const pending = clearSession().then(() => undefined).finally(() => { logoutRef.current = null; });
+        logoutRef.current = pending;
+        return pending;
     }, [syncSnapshot]);
+
+    useEffect(() => subscribeToAuthFailure(requestToken => {
+        // Ignore failures from requests made by an older session.
+        if (!tokenRef.current || (requestToken && requestToken !== tokenRef.current)) return;
+        void signOut().catch(() => { /* Already anonymous even if device storage fails. */ });
+    }), [signOut]);
 
     useEffect(() => {
         refreshSession().catch(() => {
@@ -80,6 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         return subscribeToSession((snapshot) => {
+            if (logoutRef.current && snapshot.token) return;
             syncSnapshot(snapshot as SessionSnapshot<Record<string, unknown>>);
         });
     }, [refreshSession, syncSnapshot]);

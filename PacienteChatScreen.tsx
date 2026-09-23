@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { sanitizeRemoteImageUrl, resolveRemoteImageSource } from './utils/imageSources';
 import {
   Alert,
   Image,
@@ -50,7 +49,6 @@ const normalizeText = (value: unknown) =>
   String(value || '')
     .replace(/\s+/g, ' ')
     .trim();
-
 
 const parseDateMs = (value: string | null | undefined) => {
   if (!value) return Number.POSITIVE_INFINITY;
@@ -184,7 +182,6 @@ const PacienteChatScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-
     if (!selectedChatId) return;
     loadMessages(selectedChatId);
   }, [loadMessages, selectedChatId]);
@@ -276,7 +273,6 @@ const PacienteChatScreen: React.FC = () => {
   useEffect(() => {
     setIsTyping(false);
   }, [selectedChatId]);
-
 
   const filteredContacts = useMemo(() => {
     const q = normalizeText(searchText).toLowerCase();
@@ -428,7 +424,7 @@ const PacienteChatScreen: React.FC = () => {
                     ) : (
                       (messagesByChat[selectedChatId] || []).map((message) => (
                         <View
-                           key={message.id}
+                          key={message.id}
                           style={[styles.msgWrap, message.from === 'me' && styles.msgWrapMe]}
                         >
                           <View style={[styles.msgBubble, message.from === 'me' && styles.msgBubbleMe]}>
@@ -548,38 +544,6 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 1,
   },
-  logoutText: { color: '#fff', fontWeight: '800' },
-  emptyIconBox: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#f0f6ff', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  emptyTitle: { color: colors.dark, fontSize: 15, fontWeight: '800', marginTop: 6 },
-  emptySubtitle: { color: colors.muted, fontSize: 12, fontWeight: '600', textAlign: 'center', marginTop: 4, lineHeight: 17 },
-  emptyCta: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 12, backgroundColor: '#1F4770', paddingVertical: 9, paddingHorizontal: 16, borderRadius: 10 },
-  emptyCtaText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  chatRow: { flexDirection: 'row', gap: 10, padding: 10, borderRadius: 12, marginBottom: 4, alignItems: 'center' },
-  chatRowActive: { backgroundColor: '#eef6ff', borderWidth: 1, borderColor: '#d4e6f9' },
-  chatAvatarWrap: { position: 'relative' },
-  chatAvatar: { width: 44, height: 44, borderRadius: 44, borderWidth: 2, borderColor: '#f2f6fb' },
-  onlineDot: { position: 'absolute', bottom: 1, right: 1, width: 10, height: 10, borderRadius: 10, backgroundColor: '#22c55e', borderWidth: 2, borderColor: '#fff' },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  chatName: { fontWeight: '800', color: colors.dark, fontSize: 14, flex: 1 },
-  chatNameActive: { color: colors.primary },
-  chatSpec: { color: colors.muted, fontSize: 11, fontWeight: '600', marginTop: 1 },
-  chatTime: { color: '#8aa7bf', fontSize: 10, fontWeight: '700' },
-  chatMsg: { color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: '600' },
-  unreadBadge: { backgroundColor: colors.primary, borderRadius: 10, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
-  unreadBadgeText: { color: '#fff', fontSize: 10, fontWeight: '900' },
-  chatPanel: { flex: 1, backgroundColor: '#f8fbff', borderRadius: 18, borderWidth: 1, borderColor: '#e4edf7', overflow: 'hidden' },
-  chatHeaderInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  chatHeaderAvatar: { width: 38, height: 38, borderRadius: 38, borderWidth: 2, borderColor: '#f2f6fb' },
-  chatHeaderName: { fontSize: 15, fontWeight: '800', color: colors.dark },
-  chatHeaderSub: { color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: '600' },
-  chatHeaderSpec: { fontSize: 11, fontWeight: '600', color: colors.muted, marginTop: 1 },
-  backButton: { marginRight: 8, padding: 4 },
-  joinBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.primary, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, shadowColor: colors.primary, shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
-  joinBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
-  messagesWrap: { padding: 14, gap: 8 },
-  dateSeparator: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 8, alignSelf: 'stretch' },
-  dateLine: { flex: 1, height: 1, backgroundColor: '#e4edf7' },
-  dateLabel: { color: '#8aa7bf', fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
   contactRowActive: { borderColor: colors.primary, backgroundColor: '#eef6ff' },
   contactAvatar: { width: 42, height: 42, borderRadius: 42 },
   contactName: { color: colors.dark, fontSize: 14, fontWeight: '800' },
@@ -597,8 +561,12 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: '#fff',
   },
+  chatHeaderAvatar: { width: 42, height: 42, borderRadius: 42 },
+  chatHeaderName: { color: colors.dark, fontSize: 15, fontWeight: '900' },
+  chatHeaderSub: { color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: '600' },
   messagesList: { flex: 1, marginTop: 10 },
   emptyConversation: { color: colors.muted, fontSize: 13, fontWeight: '700', marginTop: 8 },
+  msgWrap: { maxWidth: '85%', marginBottom: 6, alignSelf: 'flex-start' },
   msgWrapMe: { alignSelf: 'flex-end', alignItems: 'flex-end' },
   msgBubble: { 
     backgroundColor: colors.bubbleOther, 

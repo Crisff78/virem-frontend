@@ -1,12 +1,14 @@
 import { useEffect } from 'react';
 
 import { useSocket } from '../providers/SocketProvider';
+import { useAuth } from '../providers/AuthProvider';
 
 type RoomType = 'conversation' | 'cita';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 
 export function useSocketRoom(roomType: RoomType, resourceId: string, enabled = true) {
+    const { token } = useAuth();
     const {
         joinConversation,
         leaveConversation,
@@ -16,7 +18,8 @@ export function useSocketRoom(roomType: RoomType, resourceId: string, enabled = 
 
     useEffect(() => {
         const cleanResourceId = normalizeText(resourceId);
-        if (!enabled || !cleanResourceId) return;
+        if (!enabled || !cleanResourceId || !token) return;
+        // The provider retains this membership across reconnects until cleanup.
 
         let cancelled = false;
 
@@ -51,5 +54,6 @@ export function useSocketRoom(roomType: RoomType, resourceId: string, enabled = 
         leaveConversation,
         resourceId,
         roomType,
+        token,
     ]);
 }

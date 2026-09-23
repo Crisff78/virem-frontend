@@ -10,19 +10,20 @@ import {
   Image,
   Platform,
   Modal,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import type { ImageSourcePropType } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { usePortalAwareNavigation } from './navigation/usePortalAwareNavigation';
 import { useMedicoModule } from './navigation/MedicoModuleContext';
+import { useTheme } from "./providers/ThemeContext";
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useLanguage } from './localization/LanguageContext';
 import { useMedicoPortalSession } from './hooks/useMedicoPortalSession';
 import MedicoHeader from './components/MedicoHeader';
 import { resolveRemoteImageSource } from './utils/imageSources';
-import { useResponsive } from './hooks/useResponsive';
-import { colors } from './theme/colors';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
@@ -31,9 +32,9 @@ const SETTINGS_KEY = 'medicoSettings';
 
 const MedicoConfiguracionScreen: React.FC = () => {
   const navigation = usePortalAwareNavigation();
-  const { isInsidePortal } = useMedicoModule();
-  const { language: appLanguage, setLanguage, t } = useLanguage();
-  const { user, refreshUser, signOut, fotoUrl } =
+  const { isInsidePortal, isSidebarOpen, toggleSidebar } = useMedicoModule();
+  const { language: appLanguage, setLanguage, t, tx } = useLanguage();
+  const { user, refreshUser, signOut, fotoUrl, doctorName } =
     useMedicoPortalSession({ syncOnMount: false, addDoctorPrefix: true });
 
   const [pushEnabled, setPushEnabled] = useState(true);
@@ -126,7 +127,7 @@ const MedicoConfiguracionScreen: React.FC = () => {
     { icon: 'notification-important', label: 'Solicitudes' },
     { icon: 'chat-bubble', label: 'Mensajes', route: 'MedicoChat' },
     { icon: 'person', label: 'Perfil', route: 'MedicoPerfil' },
-    { icon: 'settings', label: 'Configuración', route: 'MedicoConfiguracion', active: true },
+    { icon: 'settings', label: 'Configuracion', route: 'MedicoConfiguracion', active: true },
   ];
 
   return (
@@ -153,7 +154,7 @@ const MedicoConfiguracionScreen: React.FC = () => {
                 <TouchableOpacity
                   key={item.label}
                   style={[styles.menuItemRow, item.active ? styles.menuItemActive : null]}
-                  onPress={() => item.route && navigation.navigate(item.route as any)}
+                  onPress={() => item.route && navigation.navigate(item.route)}
                 >
                   <MaterialIcons name={item.icon} size={20} color={item.active ? colors.primary : colors.muted} />
                   <Text style={[styles.menuText, item.active && styles.menuTextActive]}>{item.label}</Text>
@@ -174,139 +175,139 @@ const MedicoConfiguracionScreen: React.FC = () => {
           <Text style={styles.title}>Configuración</Text>
           <Text style={styles.subtitle}>Gestiona las preferencias de tu portal médico</Text>
 
-          <View style={styles.grid}>
-            {/* Cuenta */}
-            <View style={styles.cardHalf}>
-              <View style={styles.cardHeader}>
-                <View style={styles.iconBox}>
-                  <MaterialIcons name="manage-accounts" size={22} color={colors.primary} />
-                </View>
-                <View style={styles.cardHeaderText}>
-                  <Text style={styles.cardTitle}>Preferencias de Cuenta</Text>
-                  <Text style={styles.cardHint}>Idioma y formato de tiempo</Text>
-                </View>
+        <View style={styles.grid}>
+          {/* Cuenta */}
+          <View style={styles.cardHalf}>
+            <View style={styles.cardHeader}>
+              <View style={styles.iconBox}>
+                <MaterialIcons name="manage-accounts" size={22} color={colors.primary} />
               </View>
-
-              <View style={styles.itemRow}>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemTitle}>Idioma</Text>
-                  <Text style={styles.itemSub}>{languageLabel}</Text>
-                </View>
-                <TouchableOpacity onPress={() => openSelector('language')} style={styles.itemActionContainer}>
-                  <Text style={styles.itemAction}>Cambiar</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.itemRow}>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemTitle}>Formato de Hora</Text>
-                  <Text style={styles.itemSub}>{timeFormat}</Text>
-                </View>
-                <TouchableOpacity onPress={() => openSelector('timeFormat')} style={styles.itemActionContainer}>
-                  <Text style={styles.itemAction}>Editar</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.itemRowLast}>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemTitle}>Zona Horaria</Text>
-                  <Text style={styles.itemSub}>{timeZone}</Text>
-                </View>
-                <TouchableOpacity onPress={() => openSelector('timeZone')} style={styles.itemActionContainer}>
-                  <Text style={styles.itemAction}>Actualizar</Text>
-                </TouchableOpacity>
+              <View>
+                <Text style={styles.cardTitle}>Preferencias de Cuenta</Text>
+                <Text style={styles.cardHint}>Idioma y formato de tiempo</Text>
               </View>
             </View>
 
-            {/* Notificaciones */}
-            <View style={styles.cardHalf}>
-              <View style={styles.cardHeader}>
-                <View style={styles.iconBox}>
-                  <MaterialIcons name="notifications-active" size={22} color={colors.primary} />
-                </View>
-                <View style={styles.cardHeaderText}>
-                  <Text style={styles.cardTitle}>Notificaciones</Text>
-                  <Text style={styles.cardHint}>Configura cómo recibes alertas</Text>
-                </View>
+            <View style={styles.itemRow}>
+              <View>
+                <Text style={styles.itemTitle}>Idioma</Text>
+                <Text style={styles.itemSub}>{languageLabel}</Text>
               </View>
-
-              <View style={styles.toggleRow}>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemTitle}>Correo Electrónico</Text>
-                  <Text style={styles.itemSub}>Avisos de nuevas citas y mensajes</Text>
-                </View>
-                <Switch value={emailEnabled} onValueChange={setEmailEnabled} trackColor={{ false: '#d6e0eb', true: colors.primary }} />
-              </View>
-
-              <View style={styles.toggleRow}>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemTitle}>Mensajes SMS</Text>
-                  <Text style={styles.itemSub}>Alertas críticas al celular</Text>
-                </View>
-                <Switch value={smsEnabled} onValueChange={setSmsEnabled} trackColor={{ false: '#d6e0eb', true: colors.primary }} />
-              </View>
-
-              <View style={styles.toggleRowLast}>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemTitle}>Push Notifications</Text>
-                  <Text style={styles.itemSub}>Notificaciones en tiempo real</Text>
-                </View>
-                <Switch value={pushEnabled} onValueChange={setPushEnabled} trackColor={{ false: '#d6e0eb', true: colors.primary }} />
-              </View>
-            </View>
-
-            {/* Seguridad */}
-            <View style={styles.cardHalf}>
-              <View style={styles.cardHeader}>
-                <View style={styles.iconBox}>
-                  <MaterialIcons name="lock" size={22} color={colors.primary} />
-                </View>
-                <View style={styles.cardHeaderText}>
-                  <Text style={styles.cardTitle}>Seguridad</Text>
-                  <Text style={styles.cardHint}>Protege tu acceso médico</Text>
-                </View>
-              </View>
-
-              <TouchableOpacity style={styles.securityButton} onPress={() => Alert.alert('Seguridad', 'Módulo de cambio de contraseña en desarrollo.')}>
-                <View style={styles.securityLeft}>
-                  <MaterialIcons name="vpn-key" size={18} color={colors.muted} />
-                  <Text style={styles.securityText}>Cambiar Contraseña</Text>
-                </View>
-                <MaterialIcons name="chevron-right" size={20} color="#9bb1c7" />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.securityButton} onPress={() => Alert.alert('Seguridad', 'El historial de sesiones se integrará próximamente.')}>
-                <View style={styles.securityLeft}>
-                  <MaterialIcons name="history" size={18} color={colors.muted} />
-                  <Text style={styles.securityText}>Historial de Sesiones</Text>
-                </View>
-                <MaterialIcons name="chevron-right" size={20} color="#9bb1c7" />
+              <TouchableOpacity onPress={() => openSelector('language')}>
+                <Text style={styles.itemAction}>Cambiar</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Soporte */}
-            <View style={styles.cardHalf}>
-              <View style={styles.cardHeader}>
-                <View style={styles.iconBox}>
-                  <MaterialIcons name="help-outline" size={22} color={colors.primary} />
-                </View>
-                <View style={styles.cardHeaderText}>
-                  <Text style={styles.cardTitle}>Ayuda y Soporte</Text>
-                  <Text style={styles.cardHint}>Centro de atención médica</Text>
-                </View>
+            <View style={styles.itemRow}>
+              <View>
+                <Text style={styles.itemTitle}>Formato de Hora</Text>
+                <Text style={styles.itemSub}>{timeFormat}</Text>
               </View>
+              <TouchableOpacity onPress={() => openSelector('timeFormat')}>
+                <Text style={styles.itemAction}>Editar</Text>
+              </TouchableOpacity>
+            </View>
 
-              <View style={styles.supportBox}>
-                <Text style={styles.supportTitle}>¿Necesitas ayuda?</Text>
-                <Text style={styles.supportText}>Si tienes problemas con la agenda o videollamadas, contáctanos.</Text>
-                <View style={styles.supportButtons}>
-                  <TouchableOpacity style={styles.contactBtn} onPress={() => Alert.alert('Soporte', 'Escríbenos a medicos@virem.app')}>
-                    <Text style={styles.contactBtnText}>Contactar</Text>
-                  </TouchableOpacity>
-                </View>
+            <View style={styles.itemRowLast}>
+              <View>
+                <Text style={styles.itemTitle}>Zona Horaria</Text>
+                <Text style={styles.itemSub}>{timeZone}</Text>
+              </View>
+              <TouchableOpacity onPress={() => openSelector('timeZone')}>
+                <Text style={styles.itemAction}>Actualizar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Notificaciones */}
+          <View style={styles.cardHalf}>
+            <View style={styles.cardHeader}>
+              <View style={styles.iconBox}>
+                <MaterialIcons name="notifications-active" size={22} color={colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.cardTitle}>Notificaciones</Text>
+                <Text style={styles.cardHint}>Configura cómo recibes alertas</Text>
+              </View>
+            </View>
+
+            <View style={styles.toggleRow}>
+              <View>
+                <Text style={styles.itemTitle}>Correo Electrónico</Text>
+                <Text style={styles.itemSub}>Avisos de nuevas citas y mensajes</Text>
+              </View>
+              <Switch value={emailEnabled} onValueChange={setEmailEnabled} trackColor={{ false: '#d6e0eb', true: colors.primary }} />
+            </View>
+
+            <View style={styles.toggleRow}>
+              <View>
+                <Text style={styles.itemTitle}>Mensajes SMS</Text>
+                <Text style={styles.itemSub}>Alertas críticas al celular</Text>
+              </View>
+              <Switch value={smsEnabled} onValueChange={setSmsEnabled} trackColor={{ false: '#d6e0eb', true: colors.primary }} />
+            </View>
+
+            <View style={styles.toggleRowLast}>
+              <View>
+                <Text style={styles.itemTitle}>Push Notifications</Text>
+                <Text style={styles.itemSub}>Notificaciones en tiempo real</Text>
+              </View>
+              <Switch value={pushEnabled} onValueChange={setPushEnabled} trackColor={{ false: '#d6e0eb', true: colors.primary }} />
+            </View>
+          </View>
+
+          {/* Seguridad */}
+          <View style={styles.cardHalf}>
+            <View style={styles.cardHeader}>
+              <View style={styles.iconBox}>
+                <MaterialIcons name="lock" size={22} color={colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.cardTitle}>Seguridad</Text>
+                <Text style={styles.cardHint}>Protege tu acceso médico</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.securityButton} onPress={() => Alert.alert('Seguridad', 'Módulo de cambio de contraseña en desarrollo.')}>
+              <View style={styles.securityLeft}>
+                <MaterialIcons name="vpn-key" size={18} color={colors.muted} />
+                <Text style={styles.securityText}>Cambiar Contraseña</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={20} color="#9bb1c7" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.securityButton} onPress={() => Alert.alert('Seguridad', 'El historial de sesiones se integrará próximamente.')}>
+              <View style={styles.securityLeft}>
+                <MaterialIcons name="history" size={18} color={colors.muted} />
+                <Text style={styles.securityText}>Historial de Sesiones</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={20} color="#9bb1c7" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Soporte */}
+          <View style={styles.cardHalf}>
+            <View style={styles.cardHeader}>
+              <View style={styles.iconBox}>
+                <MaterialIcons name="help-outline" size={22} color={colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.cardTitle}>Ayuda y Soporte</Text>
+                <Text style={styles.cardHint}>Centro de atención médica</Text>
+              </View>
+            </View>
+
+            <View style={styles.supportBox}>
+              <Text style={styles.supportTitle}>¿Necesitas ayuda?</Text>
+              <Text style={styles.supportText}>Si tienes problemas con la agenda o videollamadas, contáctanos.</Text>
+              <View style={styles.supportButtons}>
+                <TouchableOpacity style={styles.contactBtn} onPress={() => Alert.alert('Soporte', 'Escríbenos a medicos@virem.app')}>
+                  <Text style={styles.contactBtnText}>Contactar</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </View>
+        </View>
         </ScrollView>
       </View>
 
@@ -321,7 +322,7 @@ const MedicoConfiguracionScreen: React.FC = () => {
                 </TouchableOpacity>
               ))
             ) : (
-              (selectorField ? (optionsMap as any)[selectorField] : []).map((opt: string) => (
+              (selectorField ? optionsMap[selectorField] : []).map((opt: string) => (
                 <TouchableOpacity key={opt} style={styles.optionButton} onPress={() => applyValue(opt)}>
                   <Text style={styles.optionText}>{opt}</Text>
                 </TouchableOpacity>
@@ -337,17 +338,22 @@ const MedicoConfiguracionScreen: React.FC = () => {
   );
 };
 
+const colors = {
+  primary: '#137fec',
+  bg: '#F6FAFD',
+  dark: '#0A1931',
+  blue: '#1A3D63',
+  muted: '#4A7FA7',
+  white: '#FFFFFF',
+};
+
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    flexDirection: Platform.OS === 'web' ? 'row' : 'column', 
-    backgroundColor: colors.bg 
-  },
+  container: { flex: 1, flexDirection: Platform.OS === 'web' ? 'row' : 'column', backgroundColor: colors.bg },
   sidebar: {
     width: Platform.OS === 'web' ? 280 : '100%',
     backgroundColor: colors.white,
     borderRightWidth: Platform.OS === 'web' ? 1 : 0,
-    borderRightColor: colors.border,
+    borderRightColor: '#eef2f7',
     padding: 20,
     justifyContent: 'space-between',
   },
@@ -356,48 +362,45 @@ const styles = StyleSheet.create({
   logoTitle: { fontSize: 20, fontWeight: '800', color: colors.dark },
   logoSubtitle: { fontSize: 11, fontWeight: '700', color: colors.muted },
   userBox: { marginTop: 18, alignItems: 'center', paddingVertical: 12 },
-  userAvatar: { width: 76, height: 76, borderRadius: 76, marginBottom: 10, borderWidth: 4, borderColor: colors.bg },
+  userAvatar: { width: 76, height: 76, borderRadius: 76, marginBottom: 10, borderWidth: 4, borderColor: '#f5f7fb' },
   userName: { fontWeight: '800', color: colors.dark, fontSize: 14 },
   userPlan: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
   menu: { marginTop: 10, gap: 6 },
   menuItemRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12 },
-  menuItemActive: { backgroundColor: 'rgba(19, 127, 236, 0.1)', borderRightWidth: 3, borderRightColor: colors.primary },
+  menuItemActive: { backgroundColor: 'rgba(19,127,236,0.10)', borderRightWidth: 3, borderRightColor: colors.primary },
   menuText: { fontSize: 14, fontWeight: '700', color: colors.muted },
   menuTextActive: { color: colors.primary },
   logoutButton: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.blue, paddingVertical: 12, borderRadius: 12 },
   logoutText: { color: '#fff', fontWeight: '800' },
   main: { flex: 1, paddingHorizontal: 20, paddingTop: 18 },
-  title: { fontSize: 32, fontWeight: '900', color: colors.dark },
-  subtitle: { fontSize: 16, color: colors.muted, marginTop: 6, marginBottom: 18, fontWeight: '600' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  cardHalf: { width: Platform.OS === 'web' ? '48%' : '100%', backgroundColor: colors.white, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 16, minHeight: 230, flexGrow: 1 },
+  title: { fontSize: 42, fontWeight: '900', color: colors.dark },
+  subtitle: { fontSize: 20, color: colors.muted, marginTop: 6, marginBottom: 18, fontWeight: '600' },
+  grid: { flexDirection: Platform.OS === 'web' ? 'row' : 'column', flexWrap: 'wrap', gap: 14 },
+  cardHalf: { width: Platform.OS === 'web' ? '49%' : '100%', backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#e4edf7', padding: 16, minHeight: 230 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  cardHeaderText: { flex: 1 },
-  iconBox: { width: 42, height: 42, borderRadius: 12, backgroundColor: 'rgba(19, 127, 236, 0.12)', alignItems: 'center', justifyContent: 'center' },
+  iconBox: { width: 42, height: 42, borderRadius: 12, backgroundColor: 'rgba(19,127,236,0.12)', alignItems: 'center', justifyContent: 'center' },
   cardTitle: { color: colors.dark, fontSize: 16, fontWeight: '900' },
-  cardHint: { color: colors.muted, fontSize: 11, fontWeight: '600' },
-  itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
-  itemRowLast: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
-  itemInfo: { flex: 1, paddingRight: 10 },
+  cardHint: { color: '#9bb1c7', fontSize: 11, fontWeight: '600' },
+  itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#edf3fa' },
+  itemRowLast: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 9 },
   itemTitle: { color: colors.dark, fontSize: 14, fontWeight: '800' },
-  itemSub: { color: colors.muted, fontSize: 12, fontWeight: '600', marginTop: 2 },
-  itemActionContainer: { paddingLeft: 10 },
+  itemSub: { color: '#7f93a8', fontSize: 12, fontWeight: '600' },
   itemAction: { color: colors.primary, fontSize: 14, fontWeight: '800' },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
-  toggleRowLast: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
-  securityButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, marginBottom: 10 },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#edf3fa' },
+  toggleRowLast: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 9 },
+  securityButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f8fbff', borderWidth: 1, borderColor: '#dce8f5', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, marginBottom: 10 },
   securityLeft: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   securityText: { color: colors.blue, fontSize: 14, fontWeight: '800' },
-  supportBox: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12 },
-  supportTitle: { color: colors.dark, fontSize: 14, fontWeight: '900', marginBottom: 4 },
-  supportText: { color: colors.muted, fontSize: 12, lineHeight: 17, fontWeight: '600' },
+  supportBox: { backgroundColor: '#f8fbff', borderWidth: 1, borderColor: '#dce8f5', borderRadius: 12, padding: 12 },
+  supportTitle: { color: colors.dark, fontSize: 14, fontWeight: '900' },
+  supportText: { color: '#7f93a8', fontSize: 12, lineHeight: 17, fontWeight: '600' },
   supportButtons: { flexDirection: 'row', gap: 10, marginTop: 12 },
   contactBtn: { flex: 1, backgroundColor: colors.primary, borderRadius: 10, alignItems: 'center', paddingVertical: 10 },
   contactBtnText: { color: '#fff', fontSize: 13, fontWeight: '900' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalCard: { backgroundColor: colors.white, borderRadius: 20, padding: 24, width: '90%', maxWidth: 400 },
+  modalCard: { backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '90%', maxWidth: 400 },
   modalTitle: { fontSize: 20, fontWeight: '900', color: colors.dark, marginBottom: 18, textAlign: 'center' },
-  optionButton: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
+  optionButton: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   optionText: { fontSize: 16, fontWeight: '700', color: colors.blue, textAlign: 'center' },
   cancelButton: { marginTop: 18, paddingVertical: 14 },
   cancelText: { color: colors.muted, fontSize: 16, fontWeight: '800', textAlign: 'center' },

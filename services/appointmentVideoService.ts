@@ -27,11 +27,18 @@ export type CallAccessSnapshot = {
   };
 };
 
-export type ZegoTokenResponse = {
+export type CallTokenResponse = {
   serverNow: number;
-  provider: 'zego';
-  zego: {
+  provider: 'zego' | 'livekit';
+  success: boolean;
+  message?: string;
+  livekit?: {
+    url: string;
+    token: string;
+  };
+  zego?: {
     appId: number;
+    server: string;
     token: string;
     roomId: string;
     userId: string;
@@ -91,10 +98,10 @@ export const appointmentVideoService = {
     };
   },
 
-  async requestToken(citaId: string): Promise<ZegoTokenResponse> {
-    return apiClient.post<ZegoTokenResponse>(
+  async requestToken(citaId: string): Promise<CallTokenResponse> {
+    return apiClient.post<CallTokenResponse>(
       `/api/video/me/citas/${encodeURIComponent(citaId)}/token`,
-      { authenticated: true }
+      { body: {}, authenticated: true }
     );
   },
 

@@ -1,53 +1,18 @@
+/**
+ * ViremImage — thin wrapper around Image with fallback handling.
+ */
 import React from 'react';
-import { StyleSheet, View, ViewStyle } from 'react-native';
-import { Image, ImageProps } from 'expo-image';
+import { Image, type ImageProps } from 'react-native';
 
-interface ViremImageProps extends ImageProps {
-  source?: any;
-  style?: any;
-  contentFit?: any;
-  transition?: any;
-  containerStyle?: ViewStyle;
-}
+const DefaultAvatar = require('../assets/imagenes/avatar-default.jpg');
 
-const blurhash = 'L6PZfSaD00jE.AyE_3t7t7Rj4n9G';
-
-const ViremImage = ({ 
-  source, 
-  style, 
-  containerStyle,
-  contentFit = 'cover',
-  transition = 300,
-  ...props 
-}: ViremImageProps): JSX.Element => {
-  // Determine if it's a local asset (number) or remote/URI (object with uri or string)
-  const isLocalAsset = typeof source === 'number';
-
-  return (
-    <View style={[styles.container, style, containerStyle]}>
-      <Image
-        source={source}
-        style={[styles.image, style]}
-        placeholder={isLocalAsset ? undefined : { blurhash }} // Don't use blurhash for local icons/logos
-        contentFit={contentFit}
-        transition={transition}
-        cachePolicy="memory-disk"
-        {...props}
-      />
-    </View>
-  );
+type Props = ImageProps & {
+  fallback?: any;
 };
 
-const styles = StyleSheet.create({
-  container: {
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-});
+const ViremImage: React.FC<Props> = ({ fallback, source, ...rest }) => {
+  const resolvedSource = source || fallback || DefaultAvatar;
+  return <Image source={resolvedSource} {...rest} />;
+};
 
 export default ViremImage;

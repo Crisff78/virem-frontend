@@ -1,26 +1,21 @@
 /**
- * Paleta central de Virem.
- * Antes vivía duplicada en 40+ pantallas. Importar desde aquí.
+ * Shared color tokens for the VIREM app.
  */
-export const colors = {
-  primary: '#1A4376',
-  primarySoft: 'rgba(43, 108, 176, 0.12)',
-  bg: '#F8FAFC',
-  surface: '#FFFFFF',
-  border: '#E2E8F0',
-  borderSoft: '#CBD5E1',
-  hover: '#F1F5F9',
-  dark: '#0F172A',
-  blue: '#1A365D',
-  muted: '#475569',
-  success: '#10B981',
-  warning: '#F59E0B',
-  danger: '#EF4444',
+const colors = {
+  primary: '#137fec',
+  bg: '#F6FAFD',
+  dark: '#0A1931',
+  blue: '#1A3D63',
+  green: '#22c55e',
+  red: '#ef4444',
+  muted: '#4A7FA7',
   white: '#FFFFFF',
-  // Aliases for compatibility
-  green: '#10B981',
-  red: '#EF4444',
-  brand: '#2B6CB0',
+  orange: '#f59e0b',
+  light: '#f8fafc',
+  brand: '#1e40af',
+  viremLight: '#E8EFF5',
+  viremMuted: '#7D95A9',
 } as const;
 
-export type ColorToken = keyof typeof colors;
+export default colors;
+export { colors };

@@ -21,7 +21,7 @@ export function usePortalAwareMedicoNavigation() {
       const routeParams = typeof route === 'string' ? params : route.params;
 
       if (isInsidePortal && isMedicoPortalModule(routeName)) {
-        setActiveModule(routeName as MedicoPortalModule);
+        setActiveModule(routeName as MedicoPortalModule, routeParams);
       } else {
         (realNavigation.navigate as any)(routeName, routeParams);
       }

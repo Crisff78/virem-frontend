@@ -1,275 +1,195 @@
-import React, { createRef, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Keyboard,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-
-import { ScreenScaffold } from './components/ScreenScaffold';
-import { ResponsiveContainer } from './components/ResponsiveContainer';
-import { useResponsive } from './hooks/useResponsive';
+import React, { createRef, useRef, useState } from 'react';
+import { Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { RootStackParamList } from './navigation/types';
 import { requestJson } from './utils/api';
-import { spacing, radii } from './theme/spacing';
+import { clearRecoveryTicket, saveRecoveryTicket } from './utils/passwordRecovery';
 
 type VerificarIdentidadRouteProp = RouteProp<RootStackParamList, 'VerificarIdentidad'>;
 type NavigationProps = NativeStackNavigationProp<RootStackParamList, 'VerificarIdentidad'>;
 
 const colors = {
-  primary: '#4A7FA7',
-  backgroundLight: '#F6FAFD',
-  textPrimaryLight: '#0A1931',
-  textSecondaryLight: '#1A3D63',
-  borderLight: '#B3CFE5',
-  cardLight: '#FFFFFF',
+    primary: '#4A7FA7',
+    backgroundLight: '#F6FAFD',
+    textPrimaryLight: '#0A1931',
+    textSecondaryLight: '#1A3D63',
+    borderLight: '#B3CFE5',
+    cardLight: '#FFFFFF',
 };
 
-const OTP_LENGTH = 6;
+const styles = StyleSheet.create({
+    mainContainer: { flex: 1, backgroundColor: colors.backgroundLight },
+    scrollContent: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
+    cardContainer: { backgroundColor: colors.cardLight, borderRadius: 12, elevation: 5, padding: 32, alignItems: 'center' },
+    iconWrapper: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(74, 127, 167, 0.2)', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+    icon: { color: colors.primary },
+    title: { color: colors.textPrimaryLight, fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
+    subtitle: { color: colors.textSecondaryLight, fontSize: 16, textAlign: 'center', marginBottom: 24 },
+    otpContainer: { flexDirection: 'row', justifyContent: 'center', width: '100%', gap: 10, alignSelf: 'center' },
+    otpInput: { width: 45, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 8, backgroundColor: colors.backgroundLight, textAlign: 'center', fontSize: 18, fontWeight: 'bold', color: colors.textPrimaryLight },
+    verifyButton: { width: '100%', height: 48, borderRadius: 8, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', marginTop: 16 },
+    buttonText: { color: colors.cardLight, fontSize: 16, fontWeight: 'bold' },
+    resendTextWrapper: { flexDirection: 'row', marginTop: 16 },
+    resendText: { color: colors.textSecondaryLight, fontSize: 14 },
+    resendLink: { color: colors.primary, fontWeight: 'bold', textDecorationLine: 'underline' }
+});
 
 const VerificarIdentidadScreen: React.FC = () => {
-  const route = useRoute<VerificarIdentidadRouteProp>();
-  const navigation = useNavigation<NavigationProps>();
-  const { fs, width, isSmallMobile } = useResponsive();
-  const [isLoading, setIsLoading] = useState(false);
-  const [resendLoading, setResendLoading] = useState(false);
+    const route = useRoute<VerificarIdentidadRouteProp>();
+    const navigation = useNavigation<NavigationProps>();
+    const [isLoading, setIsLoading] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
+    const { width } = useWindowDimensions();
 
-  const recipient = route.params?.email || 'tu correo electrónico';
-  const [otp, setOtp] = useState<string[]>(new Array(OTP_LENGTH).fill(''));
-  const inputRefs = useRef<Array<React.RefObject<TextInput | null>>>([]);
+    const recipient = route.params?.email || 'tu correo electronico';
+    const OTP_LENGTH = 6;
+    const [otp, setOtp] = useState<string[]>(new Array(OTP_LENGTH).fill(''));
+    const inputRefs = useRef<Array<React.RefObject<TextInput | null>>>([]);
+    const cardWidth = Math.max(300, Math.min(420, width - 24));
+    const otpBoxSize = width < 390 ? 40 : 45;
 
-  if (inputRefs.current.length === 0) {
-    inputRefs.current = Array(OTP_LENGTH)
-      .fill(0)
-      .map(() => createRef<TextInput | null>());
-  }
-
-  // OTP boxes flexibles según ancho disponible.
-  const horizontalGap = 8;
-  const cardPad = 32;
-  const innerWidth = Math.min(420, width - 32) - cardPad * 2;
-  const boxFromWidth = (innerWidth - horizontalGap * (OTP_LENGTH - 1)) / OTP_LENGTH;
-  const otpBoxSize = Math.max(36, Math.min(56, Math.floor(boxFromWidth)));
-
-  const handleOtpChange = (text: string, index: number) => {
-    const onlyDigits = String(text || '').replace(/\D/g, '');
-    const newOtp = [...otp];
-
-    if (!onlyDigits) {
-      newOtp[index] = '';
-      setOtp(newOtp);
-      return;
+    if (inputRefs.current.length === 0) {
+        inputRefs.current = Array(OTP_LENGTH).fill(0).map(() => createRef<TextInput | null>());
     }
 
-    if (onlyDigits.length > 1) {
-      let cursor = index;
-      for (const digit of onlyDigits) {
-        if (cursor >= OTP_LENGTH) break;
-        newOtp[cursor] = digit;
-        cursor += 1;
-      }
-      setOtp(newOtp);
+    const handleOtpChange = (text: string, index: number) => {
+        const onlyDigits = String(text || '').replace(/\D/g, '');
+        const newOtp = [...otp];
 
-      if (cursor < OTP_LENGTH) {
-        inputRefs.current[cursor].current?.focus();
-      } else {
-        Keyboard.dismiss();
-      }
-      return;
-    }
+        if (!onlyDigits) {
+            newOtp[index] = '';
+            setOtp(newOtp);
+            return;
+        }
 
-    newOtp[index] = onlyDigits;
-    setOtp(newOtp);
-    if (index < OTP_LENGTH - 1) {
-      inputRefs.current[index + 1].current?.focus();
-    } else {
-      Keyboard.dismiss();
-    }
-  };
+        if (onlyDigits.length > 1) {
+            let cursor = index;
+            for (const digit of onlyDigits) {
+                if (cursor >= OTP_LENGTH) break;
+                newOtp[cursor] = digit;
+                cursor += 1;
+            }
+            setOtp(newOtp);
 
-  const handleKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === 'Backspace' && otp[index] === '' && index > 0) {
-      inputRefs.current[index - 1].current?.focus();
-    }
-  };
+            if (cursor < OTP_LENGTH) {
+                inputRefs.current[cursor].current?.focus();
+            } else {
+                Keyboard.dismiss();
+            }
+            return;
+        }
 
-  const handleVerifyCode = async () => {
-    const code = otp.join('');
-    if (code.length !== OTP_LENGTH) {
-      Alert.alert('Incompleto', 'Ingresa el código completo.');
-      return;
-    }
+        newOtp[index] = onlyDigits;
+        setOtp(newOtp);
+        if (index < OTP_LENGTH - 1) {
+            inputRefs.current[index + 1].current?.focus();
+        } else {
+            Keyboard.dismiss();
+        }
+    };
 
-    setIsLoading(true);
-    try {
-      const data = await requestJson<any>('/api/auth/recovery/verify-code', {
-        method: 'POST',
-        body: { email: recipient, codigo: code },
-      });
+    const handleKeyPress = (e: any, index: number) => {
+        if (e.nativeEvent.key === 'Backspace' && otp[index] === '' && index > 0) {
+            inputRefs.current[index - 1].current?.focus();
+        }
+    };
 
-      if (data?.success) {
-        navigation.navigate('EstablecerNuevaContrasena', { email: recipient });
-      } else {
-        Alert.alert('Error', data?.message || 'Código incorrecto o expirado.');
-      }
-    } catch (error) {
-      Alert.alert('Error', (error as any)?.message || 'Sin conexión al servidor.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    const handleVerifyCode = async () => {
+        const code = otp.join('');
+        if (code.length !== OTP_LENGTH) {
+            Alert.alert('Incompleto', 'Ingresa el codigo completo.');
+            return;
+        }
 
-  const handleResendCode = async () => {
-    if (!recipient || recipient === 'tu correo electrónico') {
-      Alert.alert('Error', 'No se encontró el correo para reenviar el código.');
-      return;
-    }
+        setIsLoading(true);
+        try {
+            const data = await requestJson<any>('/api/auth/recovery/verify-code', {
+                method: 'POST',
+                body: { email: recipient, codigo: code },
+            });
 
-    setResendLoading(true);
-    try {
-      const data = await requestJson<any>('/api/auth/recovery/send-code', {
-        method: 'POST',
-        body: { email: recipient },
-      });
-      if (data?.success) {
-        const suffix = data?.devCode ? `\n\nCódigo de desarrollo: ${String(data.devCode)}` : '';
-        Alert.alert('Código reenviado', `Revisa tu correo para el nuevo código.${suffix}`);
-      } else {
-        Alert.alert('Error', data?.message || 'No se pudo reenviar el código.');
-      }
-    } catch (error) {
-      Alert.alert('Error', (error as any)?.message || 'Sin conexión al servidor.');
-    } finally {
-      setResendLoading(false);
-    }
-  };
+            if (data?.success && typeof data.recoveryTicket === 'string' && data.recoveryTicket) {
+                saveRecoveryTicket(recipient, data.recoveryTicket);
+                navigation.replace('EstablecerNuevaContrasena', { email: recipient });
+            } else {
+                Alert.alert("Error", data?.message || "Codigo incorrecto o expirado.");
+            }
+        } catch (error) {
+            Alert.alert("Error", (error as any)?.message || "Sin conexion al servidor.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-  return (
-    <ScreenScaffold background={colors.backgroundLight} center>
-      <ResponsiveContainer maxWidth={420}>
-        <View style={[styles.cardContainer, { padding: isSmallMobile ? spacing.lg : spacing.xxl }]}>
-          <View style={styles.iconWrapper}>
-            <MaterialCommunityIcons name="shield-lock" size={40} color={colors.primary} />
-          </View>
-          <Text style={[styles.title, { fontSize: fs(22) }]}>Verifica tu Identidad</Text>
-          <Text style={[styles.subtitle, { fontSize: fs(14) }]} numberOfLines={3}>
-            Introduce el código enviado a {recipient}.
-          </Text>
-          <View style={[styles.otpContainer, { gap: horizontalGap }]}>
-            {otp.map((digit, index) => (
-              <TextInput
-                key={index}
-                ref={inputRefs.current[index]}
-                style={[
-                  styles.otpInput,
-                  { width: otpBoxSize, height: otpBoxSize + 12, fontSize: fs(18) },
-                ]}
-                value={digit}
-                onChangeText={(text) => handleOtpChange(text, index)}
-                onKeyPress={(e) => handleKeyPress(e, index)}
-                keyboardType="numeric"
-                inputMode="numeric"
-                maxLength={1}
-                autoFocus={index === 0}
-                returnKeyType={index === OTP_LENGTH - 1 ? 'done' : 'next'}
-              />
-            ))}
-          </View>
-          <TouchableOpacity
-            style={[styles.verifyButton, isLoading && styles.disabled]}
-            onPress={handleVerifyCode}
-            disabled={isLoading}
-            accessibilityRole="button"
-          >
-            {isLoading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={[styles.buttonText, { fontSize: fs(15) }]}>Verificar código</Text>
-            )}
-          </TouchableOpacity>
-          <View style={styles.resendTextWrapper}>
-            <Text style={[styles.resendText, { fontSize: fs(13) }]}>¿No recibiste el código? </Text>
-            <TouchableOpacity onPress={handleResendCode} disabled={resendLoading}>
-              <Text style={[styles.resendLink, { fontSize: fs(13) }]}>
-                {resendLoading ? 'Enviando...' : 'Reenviar'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ResponsiveContainer>
-    </ScreenScaffold>
-  );
+    const handleResendCode = async () => {
+        if (!recipient || recipient === 'tu correo electronico') {
+            Alert.alert('Error', 'No se encontro el correo para reenviar el codigo.');
+            return;
+        }
+
+        setResendLoading(true);
+        clearRecoveryTicket();
+        try {
+            const data = await requestJson<any>('/api/auth/recovery/send-code', {
+                method: 'POST',
+                body: { email: recipient },
+            });
+            if (data?.success) {
+                const suffix = data?.devCode
+                    ? `\n\nCodigo de desarrollo: ${String(data.devCode)}`
+                    : '';
+                Alert.alert('Codigo reenviado', `Revisa tu correo para el nuevo codigo.${suffix}`);
+            } else {
+                Alert.alert('Error', data?.message || 'No se pudo reenviar el codigo.');
+            }
+        } catch (error) {
+            Alert.alert('Error', (error as any)?.message || 'Sin conexion al servidor.');
+        } finally {
+            setResendLoading(false);
+        }
+    };
+
+    return (
+        <ScrollView
+            style={styles.mainContainer}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+        >
+            <View style={[styles.cardContainer, { width: cardWidth }]}>
+                <View style={styles.iconWrapper}><MaterialCommunityIcons name="shield-lock" size={40} style={styles.icon} /></View>
+                <Text style={styles.title}>Verifica tu Identidad</Text>
+                <Text style={styles.subtitle}>Introduce el codigo enviado a {recipient}.</Text>
+                <View style={styles.otpContainer}>
+                    {otp.map((digit, index) => (
+                        <TextInput
+                            key={index}
+                            ref={inputRefs.current[index]}
+                            style={[styles.otpInput, { width: otpBoxSize, height: otpBoxSize + 11 }]}
+                            value={digit}
+                            onChangeText={(text) => handleOtpChange(text, index)}
+                            onKeyPress={(e) => handleKeyPress(e, index)}
+                            keyboardType="numeric"
+                            maxLength={1}
+                            autoFocus={index === 0}
+                        />
+                    ))}
+                </View>
+                <TouchableOpacity style={styles.verifyButton} onPress={handleVerifyCode} disabled={isLoading}>
+                    {isLoading ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Verificar Codigo</Text>}
+                </TouchableOpacity>
+                <View style={styles.resendTextWrapper}>
+                    <Text style={styles.resendText}>No recibiste el codigo? </Text>
+                    <TouchableOpacity onPress={handleResendCode} disabled={resendLoading}>
+                        <Text style={styles.resendLink}>
+                            {resendLoading ? 'Enviando...' : 'Reenviar'}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </ScrollView>
+    );
 };
 
 export default VerificarIdentidadScreen;
-
-const styles = StyleSheet.create({
-  cardContainer: {
-    width: '100%',
-    backgroundColor: colors.cardLight,
-    borderRadius: radii.md,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    alignItems: 'center',
-  },
-  iconWrapper: {
-    width: 64,
-    height: 64,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(74, 127, 167, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xl,
-  },
-  title: {
-    color: colors.textPrimaryLight,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-  },
-  subtitle: {
-    color: colors.textSecondaryLight,
-    textAlign: 'center',
-    marginBottom: spacing.xl,
-  },
-  otpContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    width: '100%',
-    flexWrap: 'wrap',
-  },
-  otpInput: {
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    borderRadius: radii.sm,
-    backgroundColor: colors.backgroundLight,
-    textAlign: 'center',
-    fontWeight: 'bold',
-    color: colors.textPrimaryLight,
-  },
-  verifyButton: {
-    width: '100%',
-    minHeight: 48,
-    paddingVertical: spacing.md,
-    borderRadius: radii.sm,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: spacing.base,
-  },
-  disabled: { opacity: 0.7 },
-  buttonText: { color: colors.cardLight, fontWeight: 'bold' },
-  resendTextWrapper: { flexDirection: 'row', marginTop: spacing.base, flexWrap: 'wrap' },
-  resendText: { color: colors.textSecondaryLight },
-  resendLink: { color: colors.primary, fontWeight: 'bold', textDecorationLine: 'underline' },
-});

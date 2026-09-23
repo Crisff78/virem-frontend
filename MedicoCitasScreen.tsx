@@ -19,7 +19,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { usePortalAwareMedicoNavigation } from './navigation/usePortalAwareMedicoNavigation';
 import { useMedicoModule } from './navigation/MedicoModuleContext';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import type { RootStackParamList } from './navigation/types';
 import MedicoHeader from './components/MedicoHeader';
 import { useMedicoPortalSession } from './hooks/useMedicoPortalSession';
@@ -27,8 +27,6 @@ import { useSocketEvent } from './hooks/useSocketEvent';
 import { apiClient } from './utils/api';
 import { getApiErrorMessage, isAuthError } from './utils/apiErrors';
 import { resolveRemoteImageSource } from './utils/imageSources';
-import Skeleton from './components/Skeleton';
-import ViremImage from './components/ViremImage';
 
 const ViremLogo = require('./assets/imagenes/descarga.png');
 const DefaultAvatar = require('./assets/imagenes/avatar-default.jpg');
@@ -65,7 +63,7 @@ type CitaItem = {
 };
 
 type SideItem = {
-  icon: any;
+  icon: string;
   label: string;
   route?: 'DashboardMedico' | 'MedicoCitas' | 'MedicoPacientes' | 'MedicoChat' | 'MedicoPerfil' | 'MedicoConfiguracion';
   active?: boolean;
@@ -107,7 +105,7 @@ const formatPrice = (value: number | null | undefined) => {
 
 const MedicoCitasScreen: React.FC = () => {
   const navigation = usePortalAwareMedicoNavigation();
-  const { isInsidePortal, isSidebarOpen, toggleSidebar } = useMedicoModule();
+  const { isInsidePortal, isSidebarOpen, toggleSidebar, activeModuleParams } = useMedicoModule();
   const { loadingUser, refreshUser, signOut, doctorName, doctorSpec, fotoUrl } =
     useMedicoPortalSession({ syncOnMount: false, addDoctorPrefix: true });
   const { isDesktop, isTablet, isMobile, rs, select } = useResponsive();
@@ -162,6 +160,8 @@ const MedicoCitasScreen: React.FC = () => {
     }, [loadCitas, refreshUser])
   );
 
+  const highlightCitaId = activeModuleParams?.highlightCitaId;
+
   const upsertCita = useCallback((nextCita: CitaItem) => {
     if (!nextCita?.citaid) return;
     setCitas((prev) => {
@@ -190,7 +190,7 @@ const MedicoCitasScreen: React.FC = () => {
   useSocketEvent('cita_cancelada', handleRealtimeCitaEvent);
   useSocketEvent('cita_reprogramada', handleRealtimeCitaEvent);
 
-  const userAvatarSource: any = useMemo(() => {
+  const userAvatarSource: ImageSourcePropType = useMemo(() => {
     return resolveRemoteImageSource(fotoUrl, DefaultAvatar);
   }, [fotoUrl]);
 
@@ -310,10 +310,12 @@ const MedicoCitasScreen: React.FC = () => {
   );
 
   const openVideoSala = useCallback((cita: CitaItem) => {
+    /*
     if (normalizeText(cita?.modalidad).toLowerCase() !== 'virtual') {
       Alert.alert('Consulta presencial', 'Esta cita no tiene videollamada habilitada.');
       return;
     }
+    */
 
     navigation.navigate('VideoCall', {
       citaId: cita.citaid,
@@ -366,69 +368,9 @@ const MedicoCitasScreen: React.FC = () => {
   }
 
   return (
-    <View style={[styles.container, isInsidePortal ? null : (!isDesktop && (isTablet ? styles.containerTablet : styles.containerMobile))]}>
-      {!isInsidePortal && (
-        <View style={[styles.sidebar, isDesktop ? styles.sidebarDesktop : (isTablet ? styles.sidebarTablet : styles.sidebarMobile)]}>
-          <View>
-            <View style={styles.logoWrap}>
-              <Image source={ViremLogo} style={styles.logo} resizeMode="contain" />
-              <View>
-                <Text style={styles.logoTitle}>VIREM</Text>
-                <Text style={styles.logoSub}>Portal Medico</Text>
-              </View>
-            </View>
-
-            <View style={styles.userCard}>
-              <ViremImage source={userAvatarSource} style={styles.userAvatar} />
-              <Text style={styles.userName}>{doctorName}</Text>
-              <Text style={styles.userSpec}>{doctorSpec}</Text>
-            </View>
-
-            <View style={[styles.menu, !isDesktopLayout && styles.menuMobile]}>
-              {sideItems.map((item) => (
-                <TouchableOpacity
-                  key={item.label}
-                  style={[styles.menuItem, item.active ? styles.menuItemActive : null]}
-                  onPress={() => handleSideItemPress(item)}
-                >
-                  <MaterialIcons
-                    name={item.icon}
-                    size={20}
-                    color={item.active ? colors.primary : colors.muted}
-                  />
-                  <Text style={[styles.menuText, item.active ? styles.menuTextActive : null]}>
-                    {item.label}
-                  </Text>
-                  {item.badge ? (
-                    <View style={[styles.badge, { backgroundColor: item.badge.color }]}>
-                      <Text style={styles.badgeText}>{item.badge.text}</Text>
-                    </View>
-                  ) : null}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-            <MaterialIcons name="logout" size={20} color="#fff" />
-            <Text style={styles.logoutText}>Cerrar sesion</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <ScrollView style={styles.main} contentContainerStyle={{ paddingBottom: 28 }}>
-        <View style={styles.headerWrap}>
-          <View style={[styles.headerRow, !isDesktop && styles.headerRowMobile]}>
-            <View style={styles.headerLeft}>
-              <Text style={styles.pageTitle}>Agenda Medica</Text>
-              <Text style={styles.pageSubtitle}>Administra tus citas y acciones de seguimiento.</Text>
-            </View>
-            <View style={[styles.headerRight, !isDesktop && styles.headerRightMobile]}>
-              <Text style={styles.headerDate}>{dateText}</Text>
-              <Text style={styles.headerTime}>{timeText}</Text>
-            </View>
-          </View>
-        </View>
+    <View style={{ flex: 1 }}>
+        <ScrollView style={styles.main} contentContainerStyle={{ paddingBottom: 28 }}>
+          <MedicoHeader title="Mi Agenda" />
 
         <View style={styles.searchWrap}>
           <MaterialIcons name="search" size={19} color={colors.muted} />
@@ -462,13 +404,16 @@ const MedicoCitasScreen: React.FC = () => {
         </View>
         <View style={styles.sectionCard}>
           {loadingCitas ? (
-            <View style={{ gap: 10 }}>
-              <Skeleton width="100%" height={120} borderRadius={12} />
-              <Skeleton width="100%" height={120} borderRadius={12} />
-            </View>
+            <ActivityIndicator size="small" color={colors.primary} />
           ) : upcomingCitas.length ? (
             upcomingCitas.map((cita) => (
-              <View key={cita.citaid} style={styles.citaCard}>
+              <View 
+                key={cita.citaid} 
+                style={[
+                  styles.citaCard, 
+                  highlightCitaId === cita.citaid && { borderColor: colors.primary, borderWidth: 2, backgroundColor: 'rgba(19,127,236,0.02)' }
+                ]}
+              >
                 <View style={[styles.citaTop, (isTablet || isMobile) && styles.citaTopMobile]}>
                   <View style={styles.citaMeta}>
                     <Text style={styles.citaPatient}>{normalizeText(cita?.paciente?.nombreCompleto || 'Paciente')}</Text>
@@ -501,11 +446,11 @@ const MedicoCitasScreen: React.FC = () => {
                   <TouchableOpacity
                     style={[
                       styles.primaryAction,
-                      (normalizeText(cita?.modalidad).toLowerCase() !== 'virtual' || workingCitaId === cita.citaid) &&
+                      (workingCitaId === cita.citaid) &&
                         styles.secondaryActionDisabled,
                     ]}
                     onPress={() => openVideoSala(cita)}
-                    disabled={normalizeText(cita?.modalidad).toLowerCase() !== 'virtual' || workingCitaId === cita.citaid}
+                    disabled={workingCitaId === cita.citaid}
                   >
                     <MaterialIcons name="videocam" size={16} color="#fff" />
                     <Text style={styles.primaryActionText}>Iniciar</Text>
@@ -547,7 +492,15 @@ const MedicoCitasScreen: React.FC = () => {
                     <Text style={styles.secondaryActionText}>Chat</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity style={styles.secondaryAction} onPress={() => showDetails(cita)}>
+                  <TouchableOpacity
+                    style={styles.secondaryAction}
+                    onPress={() =>
+                      navigation.navigate('MedicoPacienteDetalle', {
+                        patientId: String(cita?.paciente?.pacienteid || ''),
+                        patientName: normalizeText(cita?.paciente?.nombreCompleto || 'Paciente'),
+                      })
+                    }
+                  >
                     <Text style={styles.secondaryActionText}>Detalles</Text>
                   </TouchableOpacity>
                 </View>
@@ -583,7 +536,29 @@ const MedicoCitasScreen: React.FC = () => {
                 >
                   <Text style={styles.smallActionText}>Chat</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.smallAction} onPress={() => showDetails(cita)}>
+                <TouchableOpacity
+                  style={[styles.smallAction, { backgroundColor: 'rgba(34,197,94,0.08)', borderColor: 'rgba(34,197,94,0.2)' }]}
+                  onPress={() =>
+                    navigation.navigate('MedicoRecetas', {
+                      prefill: {
+                        pacienteId: String(cita?.paciente?.pacienteid || ''),
+                        pacienteNombre: normalizeText(cita?.paciente?.nombreCompleto || 'Paciente'),
+                        citaId: cita.citaid,
+                      },
+                    })
+                  }
+                >
+                  <Text style={[styles.smallActionText, { color: '#15803d' }]}>Crear Receta</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.smallAction}
+                  onPress={() =>
+                    navigation.navigate('MedicoPacienteDetalle', {
+                      patientId: String(cita?.paciente?.pacienteid || ''),
+                      patientName: normalizeText(cita?.paciente?.nombreCompleto || 'Paciente'),
+                    })
+                  }
+                >
                   <Text style={styles.smallActionText}>Ver</Text>
                 </TouchableOpacity>
               </View>
@@ -592,8 +567,8 @@ const MedicoCitasScreen: React.FC = () => {
             <Text style={styles.emptyText}>No hay historial para mostrar.</Text>
           )}
         </View>
-      </ScrollView>
-    </View>
+        </ScrollView>
+      </View>
   );
 };
 
@@ -793,38 +768,70 @@ const styles = StyleSheet.create({
   historySub: { color: colors.muted, fontSize: 12, fontWeight: '600' },
   smallAction: {
     borderWidth: 1,
-    borderColor: '#d6e2f0',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    borderColor: '#d8e5f3',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#f7fafe',
   },
-  smallActionText: { color: colors.blue, fontSize: 11, fontWeight: '800' },
-  emptyText: { color: colors.muted, fontSize: 13, textAlign: 'center', paddingVertical: 10 },
-  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  smallActionText: { color: colors.blue, fontSize: 12, fontWeight: '800' },
+  emptyText: { color: colors.muted, fontSize: 13, fontWeight: '700', paddingVertical: 12 },
+
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+    flexWrap: 'wrap',
+  },
   statCard: {
     flex: 1,
+    minWidth: 150,
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 14,
+    padding: 16,
     borderLeftWidth: 4,
     shadowColor: '#000',
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 2,
   },
-  statLabel: { color: colors.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
-  statValue: { color: colors.dark, fontSize: 18, fontWeight: '900', marginTop: 4 },
+  statLabel: {
+    fontSize: 12,
+    color: colors.muted,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: colors.dark,
+    marginTop: 4,
+  },
   financeRow: {
     flexDirection: 'row',
-    marginTop: 10,
-    paddingTop: 10,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
-    gap: 16,
+    gap: 24,
+    flexWrap: 'wrap',
   },
-  financeItem: { flex: 1 },
-  financeLabel: { color: colors.muted, fontSize: 10, fontWeight: '700' },
-  financeValue: { color: colors.dark, fontSize: 12, fontWeight: '800', marginTop: 2 },
+  financeItem: {
+    minWidth: 80,
+  },
+  financeLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.muted,
+    textTransform: 'uppercase',
+  },
+  financeValue: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: colors.dark,
+    marginTop: 2,
+  },
 });
 
 export default MedicoCitasScreen;
