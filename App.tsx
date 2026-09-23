@@ -42,6 +42,7 @@ import PacienteConfiguracionScreen from "./PacienteConfiguracionScreen";
 import PacienteCambiarContrasenaScreen from "./PacienteCambiarContrasenaScreen";
 import PacienteHistorialSesionesScreen from "./PacienteHistorialSesionesScreen";
 import PacienteChatScreen from "./PacienteChatScreen";
+import PacienteAsistenteScreen from './PacienteAsistenteScreen';
 import PacienteCitasScreen from "./PacienteCitasScreen";
 import VideoCallScreen from "./screens/video/VideoCallScreen";
 import IncomingCallScreen from "./screens/video/IncomingCallScreen";
@@ -96,6 +97,7 @@ const linking = {
       DashboardPaciente: "dashboard-paciente",
       PacienteCitas: "paciente-citas",
       PacienteChat: "paciente-chat",
+      PacienteAsistente: "paciente-asistente",
       PacienteRecetasDocumentos: "paciente-recetas-documentos",
       PacientePerfil: "paciente-perfil",
       NuevaConsultaPaciente: "nueva-consulta",
@@ -122,6 +124,7 @@ const linking = {
 const PatientPortalScreen = withRoleGuard(PacientePortalScreen, [PACIENTE_ROLE_ID]);
 const PatientCitasScreen = withRoleGuard(PacienteCitasScreen, [PACIENTE_ROLE_ID]);
 const PatientChatScreen = withRoleGuard(PacienteChatScreen, [PACIENTE_ROLE_ID]);
+const PatientAssistantScreen = withRoleGuard(PacienteAsistenteScreen, [PACIENTE_ROLE_ID]);
 const PatientNotificacionesScreen = withRoleGuard(PacienteNotificacionesScreen, [PACIENTE_ROLE_ID]);
 const PatientRecetasDocumentosScreen = withRoleGuard(PacienteRecetasDocumentosScreen, [PACIENTE_ROLE_ID]);
 const PatientPerfilScreen = withRoleGuard(PacientePerfilScreen, [PACIENTE_ROLE_ID]);
@@ -143,12 +146,20 @@ const DoctorConfiguracionScreen = withRoleGuard(MedicoConfiguracionScreen, [MEDI
 const AdminOnlyPanelScreen = withRoleGuard(AdminPanelScreen, [ADMIN_ROLE_ID]);
 
 const App: React.FC = () => {
+  if (__DEV__ && process.env.EXPO_PUBLIC_ASSISTANT_PREVIEW === 'true') {
+    // Keep local review controls and the synthetic session out of production bundles.
+    const AssistantPreview = require('./components/assistant/AssistantPreview').default;
+    return <AssistantPreview />;
+  }
+  const PortalPreviewNotice = __DEV__ && process.env.EXPO_PUBLIC_PORTAL_PREVIEW === 'true'
+    ? require('./components/assistant/PortalPreviewNotice').default : null;
   return (
     <SafeAreaProvider>
       <LanguageProvider>
         <ThemeProvider><AuthProvider>
           <SocketProvider>
             <SafeAreaView style={styles.rootSafeArea} edges={["top", "left", "right"]}>
+              {PortalPreviewNotice && <PortalPreviewNotice />}
               <NavigationContainer linking={linking}>
                 <Stack.Navigator
                   id="RootStack"
@@ -183,6 +194,7 @@ const App: React.FC = () => {
                   <Stack.Screen name="DashboardPaciente" component={PatientPortalScreen} />
                   <Stack.Screen name="PacienteCitas" component={PatientCitasScreen} />
                   <Stack.Screen name="PacienteChat" component={PatientChatScreen} />
+                  <Stack.Screen name="PacienteAsistente" component={PatientAssistantScreen} />
                   <Stack.Screen
                     name="PacienteNotificaciones"
                     component={PatientNotificacionesScreen}

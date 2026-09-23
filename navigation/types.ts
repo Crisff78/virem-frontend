@@ -67,6 +67,7 @@ export type RootStackParamList = {
   // ✅ NUEVA PANTALLA
   DashboardPaciente: undefined;
   PacienteCitas: undefined;
+  PacienteAsistente: undefined;
   PacienteChat:
     | {
         doctorId?: string;

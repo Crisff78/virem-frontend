@@ -29,7 +29,14 @@ jobs:
           cache: npm
 
       - name: Install deps
-        run: npm ci
+        # Existing Expo 54 / WebRTC 14 peer mismatch; match the documented local install.
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Frontend regression tests
+        run: npm test
 
       - name: Build web export
         run: npx expo export --platform web --output-dir dist-web --clear

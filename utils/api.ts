@@ -25,6 +25,11 @@ function notifyAuthFailure(token: string) {
     authFailureListeners.forEach(listener => listener(token));
 }
 
+// Streaming and multipart clients share the same session invalidation as JSON requests.
+export function checkAuthStatus(status: number, requestToken: string) {
+    if ((status === 401 || status === 403) && requestToken) notifyAuthFailure(requestToken);
+}
+
 const DEFAULT_TIMEOUT_MS = 10000;
 async function withDeadline<T>(signal: AbortSignal | null | undefined, timeoutMs: number | undefined,
     run: (signal: AbortSignal) => Promise<T>): Promise<T> {
@@ -106,9 +111,7 @@ export class ApiClient {
         const response = await fetch(url, init);
         const authorization = new Headers(init.headers).get('Authorization') || '';
         const requestToken = authorization.replace(/^Bearer\s+/i, '').trim();
-        if ((response.status === 401 || response.status === 403) && /^Bearer\s+/i.test(authorization)) {
-            notifyAuthFailure(requestToken);
-        }
+        if (/^Bearer\s+/i.test(authorization)) checkAuthStatus(response.status, requestToken);
         // Include body download in the deadline; retain Response for legacy screens.
         const text = await response.text();
         return new Response([204, 205, 304].includes(response.status) ? null : text, {

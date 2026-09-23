@@ -36,6 +36,7 @@ const MENU_ITEMS: MenuItem[] = [
   { module: 'PacienteCitas', icon: 'calendar-today', labelKey: 'menu.appointments' },
   { module: 'WaitingRoom', icon: 'videocam', labelKey: 'menu.videocall' },
   { module: 'PacienteChat', icon: 'chat-bubble', labelKey: 'menu.chat' },
+  { module: 'PacienteAsistente', icon: 'auto-awesome', labelKey: 'menu.assistant' },
   { module: 'PacienteRecetasDocumentos', icon: 'description', labelKey: 'menu.recipesDocs' },
   { module: 'PacientePerfil', icon: 'account-circle', labelKey: 'menu.profile' },
   { module: 'PacienteConfiguracion', icon: 'settings', labelKey: 'menu.settings' },
@@ -97,6 +98,7 @@ const PacienteSidebar: React.FC<PacienteSidebarProps> = ({
 
   const handleModulePress = (module: PortalModule) => {
     portalNavigate(module);
+    if (!isDesktopLayout) onCloseMobileMenu();
   };
 
   const handleLogout = async () => {
@@ -131,7 +133,7 @@ const PacienteSidebar: React.FC<PacienteSidebarProps> = ({
                   <Text style={styles.logoSubtitle}>Portal Paciente</Text>
                 </View>
               </View>
-              <TouchableOpacity onPress={onCloseMobileMenu} style={styles.closeBtn}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Cerrar menú" onPress={onCloseMobileMenu} style={styles.closeBtn}>
                 <MaterialIcons name="close" size={24} color={colors.dark} />
               </TouchableOpacity>
             </View>
@@ -150,6 +152,9 @@ const PacienteSidebar: React.FC<PacienteSidebarProps> = ({
                 return (
                   <Pressable
                     key={item.module}
+                    accessibilityRole="button"
+                    accessibilityLabel={t(item.labelKey as any)}
+                    accessibilityState={{ selected: isActive }}
                     onPress={() => handleModulePress(item.module)}
                     style={({ pressed, hovered }: any) => [
                       styles.menuItem,
@@ -172,7 +177,7 @@ const PacienteSidebar: React.FC<PacienteSidebarProps> = ({
             </ScrollView>
 
             {/* Logout */}
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('menu.logout')} style={styles.logoutButton} onPress={handleLogout}>
               <MaterialIcons name="logout" size={18} color="#fff" />
               <Text style={styles.logoutText}>{t('menu.logout')}</Text>
             </TouchableOpacity>
@@ -193,7 +198,7 @@ const PacienteSidebar: React.FC<PacienteSidebarProps> = ({
                   <Text style={styles.logoSubtitle}>Portal Paciente</Text>
                 </View>
               </View>
-              <TouchableOpacity onPress={onCloseMobileMenu} style={styles.closeBtn}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Cerrar menú" onPress={onCloseMobileMenu} style={styles.closeBtn}>
                 <MaterialIcons name="close" size={24} color={colors.dark} />
               </TouchableOpacity>
             </View>
@@ -212,6 +217,9 @@ const PacienteSidebar: React.FC<PacienteSidebarProps> = ({
                 return (
                   <Pressable
                     key={item.module}
+                    accessibilityRole="button"
+                    accessibilityLabel={t(item.labelKey as any)}
+                    accessibilityState={{ selected: isActive }}
                     onPress={() => handleModulePress(item.module)}
                     style={({ pressed, hovered }: any) => [
                       styles.menuItem,
@@ -235,7 +243,7 @@ const PacienteSidebar: React.FC<PacienteSidebarProps> = ({
           </View>
 
           {/* Logout */}
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('menu.logout')} style={styles.logoutButton} onPress={handleLogout}>
             <MaterialIcons name="logout" size={18} color="#fff" />
             <Text style={styles.logoutText}>{t('menu.logout')}</Text>
           </TouchableOpacity>

@@ -5,6 +5,8 @@
 # Web build output
 web-build/
 dist-web/
+scratch/assistant-native-export/
+scratch/assistant-native-config.json
 
 # Expo environment types
 expo-env.d.ts

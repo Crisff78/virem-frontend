@@ -15,6 +15,7 @@ export const PORTAL_MODULES = [
   'PacienteCitas',
   'WaitingRoom',
   'PacienteChat',
+  'PacienteAsistente',
   'PacienteRecetasDocumentos',
   'PacientePerfil',
   'PacienteConfiguracion',

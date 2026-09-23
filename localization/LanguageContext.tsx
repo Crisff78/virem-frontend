@@ -9,6 +9,7 @@ type TranslationKey =
   | 'menu.appointments'
   | 'menu.videocall'
   | 'menu.chat'
+  | 'menu.assistant'
   | 'menu.recipesDocs'
   | 'menu.profile'
   | 'menu.settings'
@@ -79,6 +80,7 @@ const translations: Record<AppLanguage, Record<TranslationKey, string>> = {
     'menu.appointments': 'Mis Citas',
     'menu.videocall': 'Consulta Virtual',
     'menu.chat': 'Chat',
+    'menu.assistant': 'Asistente de salud',
     'menu.recipesDocs': 'Recetas / Documentos',
     'menu.profile': 'Perfil',
     'menu.settings': 'Configuración',
@@ -139,6 +141,7 @@ const translations: Record<AppLanguage, Record<TranslationKey, string>> = {
     'menu.appointments': 'My Appointments',
     'menu.videocall': 'Virtual Consultation',
     'menu.chat': 'Chat',
+    'menu.assistant': 'Health assistant',
     'menu.recipesDocs': 'Prescriptions / Documents',
     'menu.profile': 'Profile',
     'menu.settings': 'Settings',
@@ -199,6 +202,7 @@ const translations: Record<AppLanguage, Record<TranslationKey, string>> = {
     'menu.appointments': 'Minhas Consultas',
     'menu.videocall': 'Consulta Virtual',
     'menu.chat': 'Chat',
+    'menu.assistant': 'Assistente de saúde',
     'menu.recipesDocs': 'Receitas / Documentos',
     'menu.profile': 'Perfil',
     'menu.settings': 'Configuracoes',

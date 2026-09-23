@@ -50,6 +50,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      ["expo-audio", {"microphonePermission": "Virem usa el micrófono cuando eliges dictar una pregunta.", "enableBackgroundRecording": false}],
       "expo-font",
       "expo-router",
       "expo-secure-store",

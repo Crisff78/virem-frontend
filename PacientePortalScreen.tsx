@@ -10,6 +10,7 @@ import NuevaConsultaPacienteScreen from './NuevaConsultaPacienteScreen';
 import PacienteCitasScreen from './PacienteCitasScreen';
 import WaitingRoomScreen from './screens/video/WaitingRoom';
 import PacienteChatScreen from './PacienteChatScreen';
+import PacienteAsistenteScreen from './PacienteAsistenteScreen';
 import PacienteRecetasDocumentosScreen from './PacienteRecetasDocumentosScreen';
 import PacientePerfilScreen from './PacientePerfilScreen';
 import PacienteConfiguracionScreen from './PacienteConfiguracionScreen';
@@ -21,6 +22,7 @@ const MODULE_COMPONENTS: Record<PortalModule, React.ComponentType<any>> = {
   PacienteCitas: PacienteCitasScreen,
   WaitingRoom: WaitingRoomScreen,
   PacienteChat: PacienteChatScreen,
+  PacienteAsistente: PacienteAsistenteScreen,
   PacienteRecetasDocumentos: PacienteRecetasDocumentosScreen,
   PacientePerfil: PacientePerfilScreen,
   PacienteConfiguracion: PacienteConfiguracionScreen,
